@@ -10,8 +10,6 @@
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "baseUrl": ".",
-    "paths": {
-      "@agent-control-tower/domain": ["packages/domain/src/index.ts"]
-    }
+    "paths": {}
   }
 }
