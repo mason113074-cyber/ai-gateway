@@ -1,0 +1,10 @@
+---
+description: Testing requirements and review standards
+alwaysApply: true
+---
+
+- Add or update tests for new business logic.
+- Pure functions in `packages/domain` should be tested first.
+- For non-trivial changes, include at least one failure case in tests.
+- Do not mark tasks done if you did not run relevant checks.
+- If checks cannot be run, say so explicitly and explain why.

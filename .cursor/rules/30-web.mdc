@@ -1,0 +1,16 @@
+---
+description: Frontend guidance for the Next.js admin console
+globs:
+  - "apps/web/**/*.{ts,tsx,css}"
+alwaysApply: false
+---
+
+- Build simple, readable admin UI.
+- Prioritize information density and operational clarity over visual flair.
+- Pages should help operators answer:
+  - which agent acted?
+  - what was attempted?
+  - what was approved?
+  - what evidence was recorded?
+- Keep components small and typed.
+- Do not introduce heavyweight state management unless the repo clearly needs it.

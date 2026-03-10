@@ -1,0 +1,13 @@
+---
+description: Security and audit requirements
+alwaysApply: true
+---
+
+- Assume this product will be used in enterprise environments.
+- Every risky operation should have a clear path to approval.
+- Never bypass policy checks in API handlers.
+- Every state-changing action should emit an audit event.
+- Do not store plaintext secrets in files, tests, examples, or docs.
+- Use `.env.example` for placeholders only.
+- Any endpoint that mutates state should be designed for future auth middleware.
+- If you must choose between speed and traceability, choose traceability.

@@ -1,0 +1,13 @@
+---
+description: Repository architecture decisions
+alwaysApply: true
+---
+
+- Use the existing monorepo layout.
+- Keep shared types and policy logic in `packages/domain`.
+- Keep UI code in `apps/web`.
+- Keep HTTP endpoints and orchestration in `apps/api`.
+- Avoid circular dependencies between apps and packages.
+- New domain logic should be framework-agnostic when possible.
+- Add small vertical slices instead of giant rewrites.
+- Prefer explicit types over implicit `any`.

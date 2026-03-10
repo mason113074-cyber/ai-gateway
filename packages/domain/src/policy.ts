@@ -1,0 +1,52 @@
+import type { ActionRequest, PolicyDecision } from "./types";
+
+export function evaluatePolicy(action: ActionRequest): PolicyDecision {
+  const reasons: string[] = [];
+  let requiresApproval = false;
+  let riskLevel: PolicyDecision["riskLevel"] = "low";
+
+  if (action.actionType === "delete") {
+    riskLevel = "high";
+    requiresApproval = true;
+    reasons.push("Delete actions are always high risk.");
+  }
+
+  if (action.actionType === "refund") {
+    riskLevel = "high";
+    requiresApproval = true;
+    reasons.push("Refund actions require human approval.");
+  }
+
+  if (action.amount && action.amount >= 1000) {
+    riskLevel = "high";
+    requiresApproval = true;
+    reasons.push("High-value operations require approval.");
+  }
+
+  if (action.external && action.actionType === "email") {
+    riskLevel = "high";
+    requiresApproval = true;
+    reasons.push("External emails require approval.");
+  }
+
+  if (action.containsPii && action.actionType !== "read") {
+    riskLevel = "high";
+    requiresApproval = true;
+    reasons.push("PII changes require approval.");
+  }
+
+  if (!requiresApproval && action.actionType === "write") {
+    riskLevel = "medium";
+    reasons.push("Write operations should be logged and reviewed if needed.");
+  }
+
+  if (!requiresApproval && reasons.length === 0) {
+    reasons.push("Operation falls within baseline allowed policy.");
+  }
+
+  return {
+    riskLevel,
+    requiresApproval,
+    reasons,
+  };
+}
