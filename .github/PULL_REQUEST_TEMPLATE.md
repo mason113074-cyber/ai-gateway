@@ -1,16 +1,25 @@
 ## Summary
 -
 
-## Changed files / areas
+## Why this change
+-
+
+## Touched paths
 -
 
 ## Tests
-- [ ] check run
-- [ ] test run
-- [ ] not run (explain below)
+- [ ] Build passes
+- [ ] Tests added/updated and run
+- [ ] Not run (explain below)
 
-## Risks
+## Screenshots (if UI)
 -
 
-## Rollback notes
+## Risk note
 -
+
+## Rollback note
+-
+
+## Memory docs updated
+- [ ] docs/context/current-status.md and/or decisions.md updated (if behavior or decisions changed)

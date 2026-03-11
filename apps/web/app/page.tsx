@@ -7,7 +7,7 @@ export default function HomePage() {
   return (
     <main>
       <p className="badge">Bootstrap build</p>
-      <h1>Agent Control Tower</h1>
+      <h1>AI Gateway</h1>
       <p className="muted">
         This dashboard is the first scaffold for an enterprise agent governance product.
       </p>

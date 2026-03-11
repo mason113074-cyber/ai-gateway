@@ -13,7 +13,7 @@ const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
 
 app.get("/health", async () => {
-  return { ok: true, service: "agent-control-tower-api" };
+  return { ok: true, service: "ai-gateway-api" };
 });
 
 app.get("/api/agents", async () => {

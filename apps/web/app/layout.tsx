@@ -3,7 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Agent Control Tower",
+  title: "AI Gateway",
   description: "Admin console for agent access, policy, approval, and audit.",
 };
 

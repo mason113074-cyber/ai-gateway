@@ -1,14 +1,17 @@
 {
-  "snapshot": "POPULATED_FROM_SETTINGS",
   "install": "corepack enable && pnpm install",
   "terminals": [
+    {
+      "name": "Web",
+      "command": "pnpm --filter @agent-control-tower/web dev"
+    },
     {
       "name": "API",
       "command": "pnpm --filter @agent-control-tower/api dev"
     },
     {
-      "name": "Web",
-      "command": "pnpm --filter @agent-control-tower/web dev"
+      "name": "Test",
+      "command": "pnpm test"
     }
   ]
 }

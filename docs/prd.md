@@ -1,7 +1,7 @@
 # Product Requirements Document
 
 ## Product name
-Agent Control Tower
+AI Gateway
 
 ## Problem
 Companies increasingly use AI agents to read data, call tools, draft emails, and change records.
