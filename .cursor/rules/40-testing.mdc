@@ -1,0 +1,9 @@
+---
+description: Testing requirements
+alwaysApply: true
+---
+
+- Every logic change needs tests or a written reason.
+- Prefer unit tests for domain logic; add integration/e2e only when it protects behavior.
+- Never claim tests passed unless actually run.
+- For non-trivial changes, include at least one failure case in tests.

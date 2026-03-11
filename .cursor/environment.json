@@ -1,0 +1,17 @@
+{
+  "install": "cd agent-control-tower && corepack enable && pnpm install",
+  "terminals": [
+    {
+      "name": "Web",
+      "command": "cd agent-control-tower && pnpm --filter @agent-control-tower/web dev"
+    },
+    {
+      "name": "API",
+      "command": "cd agent-control-tower && pnpm --filter @agent-control-tower/api dev"
+    },
+    {
+      "name": "Test",
+      "command": "cd agent-control-tower && pnpm test"
+    }
+  ]
+}

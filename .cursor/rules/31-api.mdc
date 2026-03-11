@@ -1,0 +1,12 @@
+---
+description: Backend guidance for Fastify API
+globs:
+  - "**/apps/api/**"
+alwaysApply: false
+---
+
+- Preserve clean handler/service/domain split.
+- Validate DTOs at the boundary.
+- Use consistent error shapes and status codes.
+- Health endpoint must remain stable.
+- Prefer small route modules and pure domain helpers; keep business logic out of route registration when possible.

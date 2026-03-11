@@ -1,0 +1,12 @@
+---
+description: Project layering and ownership
+alwaysApply: false
+---
+
+- Explain project layering: Web (Next.js admin), API (Fastify), Domain (shared types and policy), future infra.
+- Keep UI, API, domain, and infra concerns separated.
+- No shortcut imports across forbidden boundaries (e.g. web must not import from api; domain must not depend on web or server runtimes).
+- Allowed ownership by folder:
+  - **agent-control-tower/apps/web/** — frontend only; no direct server or domain implementation.
+  - **agent-control-tower/apps/api/** — HTTP boundary and orchestration only; business logic in domain.
+  - **agent-control-tower/packages/domain/** — shared types and pure policy/domain logic; no framework leakage.

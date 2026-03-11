@@ -1,0 +1,9 @@
+---
+description: Git and PR workflow
+alwaysApply: true
+---
+
+- One issue → one branch → one PR.
+- Prefer small commits; clear commit messages.
+- PR must include: summary, why this change, touched paths, test proof, risk note, rollback note.
+- Do not push directly to main unless explicitly told; prefer a setup branch and a PR.

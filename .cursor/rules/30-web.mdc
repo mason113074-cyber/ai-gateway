@@ -1,0 +1,12 @@
+---
+description: Frontend guidance for Next.js admin console
+globs:
+  - "**/apps/web/**"
+alwaysApply: false
+---
+
+- Preserve routing, metadata, and loading/error states.
+- Do not break accessibility basics.
+- Avoid large client-side state unless justified.
+- Prioritize information density and operational clarity over visual flair.
+- Pages should help operators answer: which agent acted, what was attempted, what was approved, what evidence was recorded.

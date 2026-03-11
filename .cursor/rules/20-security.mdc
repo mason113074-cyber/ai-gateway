@@ -1,0 +1,16 @@
+---
+description: Security and auth rules
+globs:
+  - "**/*.env*"
+  - "**/auth/**"
+  - "**/security/**"
+  - "**/policy/**"
+  - "**/middleware/**"
+alwaysApply: false
+---
+
+- Do not expose secrets in code, tests, examples, or docs.
+- No insecure defaults; use least privilege.
+- Validate all external inputs.
+- Log security-relevant actions (auth, policy decisions, data access).
+- Every state-changing action must be designed for future auth middleware.
