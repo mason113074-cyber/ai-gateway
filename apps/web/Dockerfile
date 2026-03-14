@@ -16,6 +16,9 @@ RUN pnpm install --frozen-lockfile
 COPY packages/domain ./packages/domain
 COPY apps/web ./apps/web
 
+# Ensure public dir exists (may not exist in repo yet)
+RUN mkdir -p apps/web/public
+
 RUN pnpm turbo build --filter=@agent-control-tower/web
 
 # Stage 3: runner (Next.js standalone)
