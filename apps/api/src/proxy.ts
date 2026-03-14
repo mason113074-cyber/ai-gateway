@@ -405,7 +405,7 @@ export function registerProxyRoutes(
             );
           if (rlConfigs.teamConfig)
             options.rateLimiter.consume(
-              `team:${teamId}`,
+              `team:${workspaceId}:${teamId}`,
               rlConfigs.teamConfig,
               1,
               0
@@ -480,7 +480,7 @@ export function registerProxyRoutes(
           );
         if (rlConfigs.teamConfig)
           options.rateLimiter.consume(
-            `team:${teamId}`,
+            `team:${workspaceId}:${teamId}`,
             rlConfigs.teamConfig,
             1,
             tokenCount
