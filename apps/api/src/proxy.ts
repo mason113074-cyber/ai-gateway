@@ -3,10 +3,14 @@ import {
   DEFAULT_PROVIDERS,
   evaluatePolicy,
   estimateCost,
+  detectPii,
+  redactRequestBody,
+  extractPromptText,
   type LogStore,
   type AgentRegistry,
   type BudgetManager,
   type AuditLogger,
+  type PiiDetectorConfig,
 } from "@agent-control-tower/domain";
 
 interface ProxyApp {
@@ -29,7 +33,12 @@ export function registerProxyRoutes(
   agentRegistry: AgentRegistry,
   logStore: LogStore,
   budgetManager: BudgetManager,
-  auditLogger: AuditLogger
+  auditLogger: AuditLogger,
+  options?: {
+    getPiiConfig?: (
+      workspaceId: string
+    ) => PiiDetectorConfig & { enabled: boolean };
+  }
 ): void {
   app.all("/v1/*", async (req: unknown, reply: unknown) => {
     const req_ = req as {
@@ -160,6 +169,66 @@ export function registerProxyRoutes(
         agentBudgetRemaining: budgetCheck.agentBudgetRemaining,
       });
     }
+
+    // ── Phase 8: PII Guardrail ─────────────────────────────
+    if (body && options?.getPiiConfig) {
+      const piiConfig = options.getPiiConfig(workspaceId);
+      if (piiConfig.enabled) {
+        const promptText = extractPromptText(body);
+        const piiMatches = detectPii(promptText, piiConfig);
+
+        if (piiMatches.length > 0) {
+          const piiSummary = piiMatches.map((m) => m.type);
+
+          if (piiConfig.action === "block") {
+            auditLogger.log(workspaceId, {
+              eventType: "guardrail.pii_blocked",
+              actorType: "agent",
+              actorId: agentId,
+              targetType: "guardrail",
+              targetId: "pii_redaction",
+              action: "proxy.request",
+              outcome: "denied",
+              metadata: { piiTypes: piiSummary, count: piiMatches.length },
+            });
+            return reply_.status(400).send({
+              error: "PII detected in prompt",
+              piiTypes: piiSummary,
+              message:
+                "Request blocked: personally identifiable information detected. Configure redaction to auto-clean prompts.",
+            });
+          }
+
+          if (piiConfig.action === "redact") {
+            body = redactRequestBody(body, piiMatches);
+            auditLogger.log(workspaceId, {
+              eventType: "guardrail.pii_redacted",
+              actorType: "system",
+              actorId: "pii-guardrail",
+              targetType: "guardrail",
+              targetId: "pii_redaction",
+              action: "redact",
+              outcome: "success",
+              metadata: { piiTypes: piiSummary, count: piiMatches.length },
+            });
+          }
+
+          if (piiConfig.action === "warn") {
+            auditLogger.log(workspaceId, {
+              eventType: "guardrail.pii_warning",
+              actorType: "system",
+              actorId: "pii-guardrail",
+              targetType: "guardrail",
+              targetId: "pii_redaction",
+              action: "warn",
+              outcome: "success",
+              metadata: { piiTypes: piiSummary, count: piiMatches.length },
+            });
+          }
+        }
+      }
+    }
+    // ── End PII Guardrail ──────────────────────────────────
 
     const headers: Record<string, string> = {
       "content-type": (req_.headers["content-type"] as string) ?? "application/json",

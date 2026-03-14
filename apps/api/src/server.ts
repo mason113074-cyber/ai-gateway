@@ -12,6 +12,8 @@ import {
   createSqliteAuditLogger,
   createSqliteBudgetManager,
   createSqliteApiKeyManager,
+  createSqliteGuardrailStore,
+  getPiiConfig,
   queryCostAttribution,
   type ActionRequest,
 } from "@agent-control-tower/domain";
@@ -26,6 +28,7 @@ const agentRegistry = createSqliteAgentRegistry(db);
 const auditLogger = createSqliteAuditLogger(db);
 const budgetManager = createSqliteBudgetManager(db, raw);
 const apiKeyManager = createSqliteApiKeyManager(raw);
+const guardrailStore = createSqliteGuardrailStore(db);
 
 const createApp = Fastify as unknown as (opts?: { logger?: boolean }) => Parameters<typeof registerProxyRoutes>[0] & {
   register: (plugin: unknown, opts?: unknown) => Promise<void>;
@@ -50,7 +53,9 @@ registerAuthMiddleware(app as Parameters<typeof registerAuthMiddleware>[0], apiK
       outcome: (event.outcome === "success" || event.outcome === "error" ? event.outcome : "denied") as "denied" | "error" | "success",
     }),
 });
-registerProxyRoutes(app, agentRegistry, logStore, budgetManager, auditLogger);
+registerProxyRoutes(app, agentRegistry, logStore, budgetManager, auditLogger, {
+  getPiiConfig: (workspaceId) => getPiiConfig(guardrailStore, workspaceId),
+});
 
 app.get("/health", async () => {
   return { ok: true, service: "ai-gateway-api" };
@@ -110,6 +115,37 @@ app.get("/api/audit-logs", { preHandler: [requirePermission("read:audit")] }, as
     limit: q.limit ? Number(q.limit) : 100,
     offset: q.offset ? Number(q.offset) : 0,
   });
+  return result;
+});
+
+app.get("/api/guardrails", { preHandler: [requirePermission("read:audit")] }, async (request: { workspaceId?: string }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  return { items: guardrailStore.list(workspaceId) };
+});
+
+app.post("/api/guardrails", { preHandler: [requirePermission("write:policies")] }, async (request: {
+  workspaceId?: string;
+  body?: { type: string; config: { enabledTypes: string[]; action: string }; enabled?: boolean };
+}) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const { type, config, enabled } = request.body ?? {};
+  if (!type || !config) throw { statusCode: 400, message: "type and config required" };
+  const result = guardrailStore.upsert(workspaceId, type, config as Parameters<typeof guardrailStore.upsert>[2], enabled ?? true);
+  return result;
+});
+
+app.patch("/api/guardrails/:id", { preHandler: [requirePermission("write:policies")] }, async (request: {
+  workspaceId?: string;
+  params?: { id: string };
+  body?: { enabled?: boolean };
+}) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const { id } = request.params ?? {};
+  const { enabled } = request.body ?? {};
+  if (!id) throw { statusCode: 400, message: "id required" };
+  if (enabled === undefined) throw { statusCode: 400, message: "enabled required" };
+  const result = guardrailStore.setEnabled(workspaceId, id, enabled);
+  if (!result) throw { statusCode: 404, message: "Guardrail config not found" };
   return result;
 });
 
