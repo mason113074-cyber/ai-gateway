@@ -1,8 +1,0 @@
----
-description: Repo memory and docs
-alwaysApply: true
----
-
-- Update repo memory docs after meaningful changes: docs/context/current-status.md, decisions.md, roadmap.md, handoff.md as needed.
-- Keep current-status, decisions, and roadmap in sync with reality.
-- Do not rely on hidden chat memory; use docs/context as the source of truth.
