@@ -17,19 +17,18 @@ jobs:
         with:
           node-version: 20
 
+      # Use pnpm version from package.json "packageManager" only (omit version here to avoid "Multiple versions of pnpm specified")
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Install
         run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm build
 
       - name: Check
         run: pnpm check
 
       - name: Test
         run: pnpm test
-
-      - name: Build
-        run: pnpm build
