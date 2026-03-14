@@ -1,5 +1,6 @@
 # Stage 1: base
 FROM node:20-slim AS base
+ENV COREPACK_INTEGRITY_KEYS="0"
 RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
 
 # Stage 2: builder (full monorepo, build api + domain)
