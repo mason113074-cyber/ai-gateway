@@ -26,3 +26,15 @@ export {
   getPiiConfig,
 } from "./pii/guardrail-store.js";
 export type { GuardrailConfig, GuardrailStore } from "./pii/guardrail-store.js";
+// Phase 9: Rate Limiting
+export { createSlidingWindowRateLimiter } from "./rate-limiter.js";
+export type {
+  RateLimiter,
+  RateLimitConfig,
+  RateLimitResult,
+} from "./rate-limiter.js";
+export { createSqliteRateLimitConfigStore } from "./rate-limit-config-store.js";
+export type {
+  RateLimitConfigStore,
+  RateLimitConfigRecord,
+} from "./rate-limit-config-store.js";

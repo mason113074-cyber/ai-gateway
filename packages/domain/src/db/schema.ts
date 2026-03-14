@@ -3,6 +3,7 @@ import {
   text,
   integer,
   real,
+  primaryKey,
 } from "drizzle-orm/sqlite-core";
 
 export const proxyLogs = sqliteTable("proxy_logs", {
@@ -113,6 +114,30 @@ export const guardrailConfigs = sqliteTable("guardrail_configs", {
   type: text("type").notNull(), // 'pii_redaction' | 'prompt_injection' | 'content_filter'
   config: text("config").notNull(), // JSON configuration
   enabled: integer("enabled").notNull().default(1),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// ── Phase 9: Rate Limiting ──────────────────────────────────
+export const rateLimitWindows = sqliteTable(
+  "rate_limit_windows",
+  {
+    key: text("key").notNull(),
+    windowStart: integer("window_start").notNull(),
+    count: integer("count").notNull().default(0),
+    tokenCount: integer("token_count").notNull().default(0),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.key, t.windowStart] }) })
+);
+
+export const rateLimitConfigs = sqliteTable("rate_limit_configs", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id").notNull(),
+  requestsPerMinute: integer("requests_per_minute").notNull(),
+  tokensPerMinute: integer("tokens_per_minute"),
+  burstMultiplier: real("burst_multiplier").notNull().default(1.5),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

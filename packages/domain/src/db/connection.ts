@@ -125,6 +125,27 @@ export function createDatabaseWithRaw(
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    -- Phase 9: Rate Limiting
+    CREATE TABLE IF NOT EXISTS rate_limit_windows (
+      key TEXT NOT NULL,
+      window_start INTEGER NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      token_count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (key, window_start)
+    );
+    CREATE TABLE IF NOT EXISTS rate_limit_configs (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      requests_per_minute INTEGER NOT NULL,
+      tokens_per_minute INTEGER,
+      burst_multiplier REAL NOT NULL DEFAULT 1.5,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rl_windows_key ON rate_limit_windows(key);
+    CREATE INDEX IF NOT EXISTS idx_rl_configs_workspace ON rate_limit_configs(workspace_id, target_type);
   `);
 
   return { db: drizzle(sqlite, { schema }), raw: sqlite };
