@@ -87,7 +87,7 @@ export function createSlidingWindowRateLimiter(raw: RawDatabase): RateLimiter {
       return {
         allowed: false,
         remaining: 0,
-        limit: config.requestsPerMinute,
+        limit: effectiveLimit,
         resetAt,
         retryAfterSeconds: Math.max(1, retryAfterSeconds),
       };
@@ -104,7 +104,7 @@ export function createSlidingWindowRateLimiter(raw: RawDatabase): RateLimiter {
         return {
           allowed: false,
           remaining: 0,
-          limit: config.requestsPerMinute,
+          limit: effectiveLimit,
           resetAt,
           retryAfterSeconds: Math.max(1, retryAfterSeconds),
         };
@@ -114,7 +114,7 @@ export function createSlidingWindowRateLimiter(raw: RawDatabase): RateLimiter {
     return {
       allowed: true,
       remaining,
-      limit: config.requestsPerMinute,
+      limit: effectiveLimit,
       resetAt,
     };
   }
