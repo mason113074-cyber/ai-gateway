@@ -101,7 +101,9 @@ export function createSqliteRateLimitConfigStore(
   );
   const getGlobalStmt = raw.prepare(
     `SELECT * FROM rate_limit_configs
-     WHERE workspace_id = ? AND target_type = 'global' LIMIT 1`
+     WHERE workspace_id = ? AND target_type = 'global'
+     ORDER BY updated_at DESC
+     LIMIT 1`
   );
   const getTeamStmt = raw.prepare(
     `SELECT * FROM rate_limit_configs
