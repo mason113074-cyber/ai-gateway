@@ -1,45 +1,63 @@
-import { mockAgents, mockApprovals, mockAuditEvents } from "@agent-control-tower/domain";
+import Link from "next/link";
 
-export default function HomePage() {
-  const activeAgents = mockAgents.filter((agent) => agent.status === "active").length;
-  const pendingApprovals = mockApprovals.filter((approval) => approval.status === "pending").length;
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+
+async function getOverviewStats(): Promise<{
+  agentCount: number;
+  totalRequests: number;
+  totalCostUsd: number;
+}> {
+  try {
+    const [agentsRes, statsRes] = await Promise.all([
+      fetch(`${API_BASE}/api/agents`, {
+        cache: "no-store",
+        headers: { "x-workspace-id": "default" },
+      }),
+      fetch(`${API_BASE}/api/stats`, {
+        cache: "no-store",
+        headers: { "x-workspace-id": "default" },
+      }),
+    ]);
+    const agents = agentsRes.ok ? ((await agentsRes.json()) as { items: unknown[] }).items?.length ?? 0 : 0;
+    const stats = statsRes.ok ? (await statsRes.json()) as { totalRequests: number; totalCostUsd: number } : { totalRequests: 0, totalCostUsd: 0 };
+    return {
+      agentCount: agents,
+      totalRequests: stats.totalRequests ?? 0,
+      totalCostUsd: stats.totalCostUsd ?? 0,
+    };
+  } catch {
+    return { agentCount: 0, totalRequests: 0, totalCostUsd: 0 };
+  }
+}
+
+export default async function HomePage() {
+  const { agentCount, totalRequests, totalCostUsd } = await getOverviewStats();
 
   return (
     <main>
-      <p className="badge">Bootstrap build</p>
       <h1>AI Gateway</h1>
-      <p className="muted">
-        This dashboard is the first scaffold for an enterprise agent governance product.
-      </p>
+      <p className="muted">Agent governance control plane — proxy, tag, and govern LLM traffic.</p>
 
       <section className="card-grid">
-        <article className="card">
-          <h2>{mockAgents.length}</h2>
-          <p className="muted">Registered agents</p>
-        </article>
-        <article className="card">
-          <h2>{activeAgents}</h2>
-          <p className="muted">Active agents</p>
-        </article>
-        <article className="card">
-          <h2>{pendingApprovals}</h2>
-          <p className="muted">Pending approvals</p>
-        </article>
-        <article className="card">
-          <h2>{mockAuditEvents.length}</h2>
-          <p className="muted">Recent audit events</p>
-        </article>
+        <Link href="/agents" className="card" style={{ textDecoration: "none" }}>
+          <h2>{agentCount}</h2>
+          <p className="muted">Agents</p>
+        </Link>
+        <Link href="/dashboard" className="card" style={{ textDecoration: "none" }}>
+          <h2>{totalRequests}</h2>
+          <p className="muted">Requests</p>
+        </Link>
+        <Link href="/dashboard" className="card" style={{ textDecoration: "none" }}>
+          <h2>${totalCostUsd.toFixed(4)}</h2>
+          <p className="muted">Cost (USD)</p>
+        </Link>
       </section>
 
-      <section className="table-card">
-        <h2>What comes next</h2>
-        <ol>
-          <li>Wire real auth and workspace boundaries.</li>
-          <li>Persist agent registry and audit events in a database.</li>
-          <li>Add policy-based approvals for risky actions.</li>
-          <li>Render trace replay and incident review screens.</li>
-        </ol>
-      </section>
+      <nav style={{ marginTop: 24, display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <Link href="/dashboard">Dashboard</Link>
+        <Link href="/agents">Agents</Link>
+        <Link href="/logs">Logs</Link>
+      </nav>
     </main>
   );
 }

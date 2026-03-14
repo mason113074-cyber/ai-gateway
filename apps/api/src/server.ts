@@ -3,10 +3,11 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import {
   evaluatePolicy,
-  mockAgents,
+  InMemoryAgentRegistry,
   mockApprovals,
   mockAuditEvents,
   type ActionRequest,
+  type AgentRecord,
 } from "@agent-control-tower/domain";
 import { registerAuthMiddleware } from "./auth-middleware.js";
 import { registerProxyRoutes, getLogStore } from "./proxy.js";
@@ -14,9 +15,11 @@ import { registerProxyRoutes, getLogStore } from "./proxy.js";
 const createFastify = Fastify as unknown as (opts?: { logger?: boolean }) => any;
 const app = createFastify({ logger: true });
 
+const agentRegistry = new InMemoryAgentRegistry();
+
 await app.register(cors, { origin: true });
 registerAuthMiddleware(app);
-registerProxyRoutes(app);
+registerProxyRoutes(app, agentRegistry);
 
 const logStore = getLogStore();
 
@@ -32,8 +35,26 @@ app.get("/api/session", async (request: { workspaceId?: string; userId?: string 
   };
 });
 
-app.get("/api/agents", async () => {
-  return { items: mockAgents };
+app.get("/api/agents", async (request: { workspaceId?: string }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  return { items: agentRegistry.list(workspaceId) };
+});
+
+app.post("/api/agents", async (request: { body?: Omit<AgentRecord, "id">; workspaceId?: string }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const body = request.body;
+  if (!body) throw { statusCode: 400, message: "Body required" };
+  const agent = agentRegistry.create(workspaceId, body);
+  return agent;
+});
+
+app.patch("/api/agents/:id", async (request: { params: { id: string }; body?: Partial<Omit<AgentRecord, "id">>; workspaceId?: string }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const { id } = request.params;
+  const body = request.body ?? {};
+  const agent = agentRegistry.update(workspaceId, id, body);
+  if (!agent) throw { statusCode: 404, message: "Agent not found" };
+  return agent;
 });
 
 app.get("/api/approvals", async () => {

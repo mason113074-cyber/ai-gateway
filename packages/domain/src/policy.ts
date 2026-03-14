@@ -1,9 +1,21 @@
-import type { ActionRequest, PolicyDecision } from "./types";
+import type { ActionRequest, PolicyDecision, PolicyVerdict } from "./types";
 
 export function evaluatePolicy(action: ActionRequest): PolicyDecision {
   const reasons: string[] = [];
   let requiresApproval = false;
   let riskLevel: PolicyDecision["riskLevel"] = "low";
+
+  if (action.actionType === "delete" && action.external) {
+    reasons.push("External delete operations are not permitted.");
+    const rationale = reasons.join(" ");
+    return {
+      verdict: "deny",
+      riskLevel: "high",
+      requiresApproval: true,
+      reasons,
+      rationale,
+    };
+  }
 
   if (action.actionType === "delete") {
     riskLevel = "high";
@@ -44,9 +56,15 @@ export function evaluatePolicy(action: ActionRequest): PolicyDecision {
     reasons.push("Operation falls within baseline allowed policy.");
   }
 
+  const verdict: PolicyVerdict =
+    riskLevel === "high" && requiresApproval ? "requires_approval" : "allow";
+  const rationale = reasons.join(" ");
+
   return {
+    verdict,
     riskLevel,
     requiresApproval,
     reasons,
+    rationale,
   };
 }

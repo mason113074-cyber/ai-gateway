@@ -1,7 +1,9 @@
 import { request as undiciRequest } from "undici";
 import {
   DEFAULT_PROVIDERS,
+  evaluatePolicy,
   InMemoryLogStore,
+  type AgentRegistry,
   type ProxyRequestLog,
 } from "@agent-control-tower/domain";
 
@@ -28,7 +30,7 @@ export function getLogStore(): InMemoryLogStore {
   return logStore;
 }
 
-export function registerProxyRoutes(app: ProxyApp): void {
+export function registerProxyRoutes(app: ProxyApp, agentRegistry?: AgentRegistry): void {
   app.all("/v1/*", async (req: unknown, reply: unknown) => {
     const req_ = req as {
       method: string;
@@ -52,6 +54,10 @@ export function registerProxyRoutes(app: ProxyApp): void {
     const provider =
       (req_.headers["x-provider"] as string) ?? "openai";
     const workspaceId = req_.workspaceId ?? "default";
+
+    if (agentRegistry) {
+      agentRegistry.ensureExists(workspaceId, agentId);
+    }
 
     const baseUrl = getUpstreamBaseUrl(provider);
     const apiKey = getUpstreamApiKey(provider);
@@ -90,6 +96,20 @@ export function registerProxyRoutes(app: ProxyApp): void {
       }
     } catch {
       // no body
+    }
+
+    const decision = evaluatePolicy({
+      actionType: "write",
+      target: model,
+      external: true,
+      amount: undefined,
+    });
+    if (decision.verdict === "deny") {
+      reply_.status(403).send({
+        error: "Policy denied",
+        rationale: decision.rationale,
+      });
+      return;
     }
 
     const headers: Record<string, string> = {

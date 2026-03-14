@@ -1,34 +1,67 @@
 # AI Gateway
 
-AI gateway and agent governance control plane. Agent Access + Audit Layer: know which agent is acting; know what tools and data it may access; require approvals for risky actions; keep replayable audit evidence.
-
-## Project memory (source of truth)
-
-Long-term context lives in the repo, not in chat:
-
-- **AGENTS.md** — mission, boundaries, workflow, definition of done
-- **docs/context/** — current status, decisions, roadmap, handoff, domain glossary
-
-Start with AGENTS.md and `docs/context/current-status.md` before coding.
-
-## Cursor in this repo
-
-- **Rules**: `.cursor/rules/` — core, architecture, security, web, api, domain, testing, git workflow, docs/memory
-- **Commands** (skills): `.cursor/commands/` — plan-issue, implement-*-slice, subagent-*, run-all-and-fix, security-pass, create-pr-summary, update-memory, handoff
-- **Memory context**: `docs/context/*` — do not rely on hidden chat memory
-- **Bugbot**: `.cursor/BUGBOT.md` — review policy for PRs
-- **Background agents must never**: push to main, change deployment/prod configs, add secrets, merge unrelated histories, force-push to shared branches, rename internal package names without a safe plan
+Open-source LLM proxy with agent identity, cost tracking, and governance.
 
 ## Quick start
 
-1. Node 20+ and pnpm (e.g. Corepack: `corepack enable`).
-2. `pnpm install`
-3. `pnpm dev` — web :3000, API :4000
-4. `pnpm build` && `pnpm test` to validate
+1. **Change your OpenAI base URL:**
 
-## Repo structure
+   ```
+   # Before
+   https://api.openai.com/v1
 
-- **apps/web** — Next.js admin dashboard
-- **apps/api** — Fastify control-plane API
-- **packages/domain** — shared types, policy engine, mock data
-- **docs/** — prd, architecture, backlog, context (memory), workflow, prompts
+   # After
+   http://localhost:4000/v1
+   ```
+
+2. **Add agent identity headers:**
+
+   ```
+   x-agent-id: my-support-bot
+   x-team-id: cx-team
+   ```
+
+3. Every LLM call is now automatically:
+   - Logged with agent identity
+   - Tracked for cost and token usage
+   - Evaluated against your governance policies
+
+## Features
+
+- **One-line integration** — just change your base URL
+- **Agent identity tagging** — every request tagged to a specific agent and team
+- **Cost tracking** — real-time per-agent, per-team, per-model cost breakdown
+- **Policy engine** — allow / deny / requires_approval decisions
+- **Admin console** — Next.js dashboard for visibility
+
+## Architecture
+
+- **apps/api** — Fastify proxy + control API (port 4000)
+- **apps/web** — Next.js admin console (port 3000)
+- **packages/domain** — policy engine + shared types
+
+## Development
+
+```bash
+pnpm install
+pnpm turbo dev
+```
+
+Run checks and tests:
+
+```bash
+pnpm turbo check
+pnpm turbo test
+pnpm turbo build
+```
+
+## Project memory (source of truth)
+
+- **AGENTS.md** — mission, boundaries, workflow, definition of done
+- **docs/context/** — current status, decisions, roadmap, handoff
+
+Start with AGENTS.md and `docs/context/current-status.md` before coding.
+
+## License
+
+MIT — see LICENSE.
