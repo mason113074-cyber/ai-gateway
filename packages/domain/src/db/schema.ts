@@ -105,3 +105,14 @@ export const apiKeys = sqliteTable("api_keys", {
   lastUsedAt: text("last_used_at"),
   createdAt: text("created_at").notNull(),
 });
+
+// ── Phase 8: Guardrail Configs ───────────────────────────────
+export const guardrailConfigs = sqliteTable("guardrail_configs", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  type: text("type").notNull(), // 'pii_redaction' | 'prompt_injection' | 'content_filter'
+  config: text("config").notNull(), // JSON configuration
+  enabled: integer("enabled").notNull().default(1),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

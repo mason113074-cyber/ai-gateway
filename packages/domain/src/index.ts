@@ -19,3 +19,10 @@ export { createSqliteBudgetManager } from "./db/sqlite-budget-manager.js";
 export { queryCostAttribution } from "./db/cost-attribution.js";
 export type { CostAttributionRow } from "./db/cost-attribution.js";
 export { createSqliteApiKeyManager } from "./db/sqlite-api-key-manager.js";
+// Phase 8: PII & Guardrails
+export * from "./pii/detector.js";
+export {
+  createSqliteGuardrailStore,
+  getPiiConfig,
+} from "./pii/guardrail-store.js";
+export type { GuardrailConfig, GuardrailStore } from "./pii/guardrail-store.js";

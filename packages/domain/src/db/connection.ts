@@ -115,6 +115,16 @@ export function createDatabaseWithRaw(
       last_used_at TEXT,
       created_at TEXT NOT NULL
     );
+    -- Phase 8: Guardrail Configs
+    CREATE TABLE IF NOT EXISTS guardrail_configs (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      config TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   return { db: drizzle(sqlite, { schema }), raw: sqlite };
