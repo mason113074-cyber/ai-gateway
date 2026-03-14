@@ -1,5 +1,6 @@
 # Stage 1: base
 FROM node:20-slim AS base
+ENV COREPACK_INTEGRITY_KEYS="0"
 RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
 
 # Stage 2: builder (full monorepo, build api + domain)
@@ -8,7 +9,7 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.base.json ./
 COPY packages/domain/package.json ./packages/domain/
 COPY apps/api/package.json ./apps/api/
 
