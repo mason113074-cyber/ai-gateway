@@ -14,19 +14,23 @@ describe("auth middleware and session", () => {
       userId: request.userId ?? null,
     }));
 
-    const res = await app.inject({
-      method: "GET",
-      url: "/session",
-      headers: {
-        "x-workspace-id": "ws-1",
-        "x-user-id": "user-1",
-      },
-    });
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: "/session",
+        headers: {
+          "x-workspace-id": "ws-1",
+          "x-user-id": "user-1",
+        },
+      });
 
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
-    expect(body.workspaceId).toBe("ws-1");
-    expect(body.userId).toBe("user-1");
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.workspaceId).toBe("ws-1");
+      expect(body.userId).toBe("user-1");
+    } finally {
+      await app.close();
+    }
   });
 
   it("returns null when headers are missing", async () => {
@@ -37,14 +41,18 @@ describe("auth middleware and session", () => {
       userId: request.userId ?? null,
     }));
 
-    const res = await app.inject({
-      method: "GET",
-      url: "/session",
-    });
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: "/session",
+      });
 
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
-    expect(body.workspaceId).toBe(null);
-    expect(body.userId).toBe(null);
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.workspaceId).toBe(null);
+      expect(body.userId).toBe(null);
+    } finally {
+      await app.close();
+    }
   });
 });
