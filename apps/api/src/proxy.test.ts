@@ -1,15 +1,38 @@
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
-import { registerProxyRoutes, getLogStore } from "./proxy.js";
-import { registerAuthMiddleware } from "./auth-middleware.js";
+import { registerProxyRoutes } from "./proxy.js";
+import { registerAuthMiddleware, createLegacyOnlyApiKeyManager } from "./auth-middleware.js";
+import {
+  InMemoryAgentRegistry,
+  InMemoryLogStore,
+  type BudgetManager,
+  type AuditLogger,
+} from "@agent-control-tower/domain";
 
 const createFastify = Fastify as unknown as (opts?: object) => any;
+const legacyAuth = createLegacyOnlyApiKeyManager();
+
+const mockBudgetManager: BudgetManager = {
+  checkBudget: () => ({ allowed: true, reason: "", teamBudgetRemaining: 1000, agentBudgetRemaining: 100 }),
+  recordSpend: () => {},
+  setTeamBudget: () => {},
+  setAgentBudget: () => {},
+  getTeamBudget: () => null,
+  getAgentBudget: () => null,
+  listTeamBudgets: () => [],
+  resetDailyBudgets: () => {},
+  resetMonthlyBudgets: () => {},
+};
+const mockAuditLogger: AuditLogger = {
+  log: () => {},
+  query: () => ({ items: [], total: 0 }),
+};
 
 describe("proxy and log APIs", () => {
   it("returns 502 for /v1/chat/completions when no upstream key configured", async () => {
     const app = createFastify();
-    registerAuthMiddleware(app);
-    registerProxyRoutes(app);
+    registerAuthMiddleware(app, legacyAuth);
+    registerProxyRoutes(app, new InMemoryAgentRegistry(), new InMemoryLogStore(), mockBudgetManager, mockAuditLogger);
 
     try {
       const res = await app.inject({
@@ -27,10 +50,10 @@ describe("proxy and log APIs", () => {
   });
 
   it("logs x-agent-id and x-team-id when proxy is called", async () => {
+    const logStore = new InMemoryLogStore();
     const app = createFastify();
-    registerAuthMiddleware(app);
-    registerProxyRoutes(app);
-    const logStore = getLogStore();
+    registerAuthMiddleware(app, legacyAuth);
+    registerProxyRoutes(app, new InMemoryAgentRegistry(), logStore, mockBudgetManager, mockAuditLogger);
 
     try {
       await app.inject({
@@ -51,10 +74,10 @@ describe("proxy and log APIs", () => {
   });
 
   it("GET /api/logs returns logged requests", async () => {
+    const logStore = new InMemoryLogStore();
     const app = createFastify();
-    registerAuthMiddleware(app);
-    registerProxyRoutes(app);
-    const logStore = getLogStore();
+    registerAuthMiddleware(app, legacyAuth);
+    registerProxyRoutes(app, new InMemoryAgentRegistry(), logStore, mockBudgetManager, mockAuditLogger);
     app.get("/api/logs", async (req: { query?: { agentId?: string; teamId?: string; limit?: string } }) => {
       const { agentId, teamId, limit } = req.query ?? {};
       return { items: logStore.list({ agentId, teamId, limit: limit ? Number(limit) : 100 }) };
@@ -92,10 +115,10 @@ describe("proxy and log APIs", () => {
   });
 
   it("GET /api/stats returns aggregated data", async () => {
+    const logStore = new InMemoryLogStore();
     const app = createFastify();
-    registerAuthMiddleware(app);
-    registerProxyRoutes(app);
-    const logStore = getLogStore();
+    registerAuthMiddleware(app, legacyAuth);
+    registerProxyRoutes(app, new InMemoryAgentRegistry(), logStore, mockBudgetManager, mockAuditLogger);
     app.get("/api/stats", async (req: { query?: { agentId?: string; teamId?: string } }) => {
       const { agentId, teamId } = req.query ?? {};
       return logStore.getStats({ agentId, teamId });

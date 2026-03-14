@@ -54,18 +54,15 @@ export class InMemoryLogStore implements LogStore {
     > = {};
     let totalCostUsd = 0;
     let totalTokens = 0;
-
     for (const log of filtered) {
-      const m = log.model || "unknown";
-      if (!byModel[m])
-        byModel[m] = { requests: 0, costUsd: 0, tokens: 0 };
+      const m = log.model ?? "unknown";
+      if (!byModel[m]) byModel[m] = { requests: 0, costUsd: 0, tokens: 0 };
       byModel[m].requests++;
       byModel[m].costUsd += log.costUsd ?? 0;
       byModel[m].tokens += log.totalTokens ?? 0;
       totalCostUsd += log.costUsd ?? 0;
       totalTokens += log.totalTokens ?? 0;
     }
-
     return {
       totalRequests: filtered.length,
       totalCostUsd,
