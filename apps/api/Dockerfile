@@ -1,6 +1,6 @@
 # Stage 1: base
 FROM node:20-slim AS base
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
 
 # Stage 2: builder (full monorepo, build api + domain)
 FROM base AS builder
