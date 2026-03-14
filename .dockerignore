@@ -1,0 +1,7 @@
+.git
+data/
+*.db
+.env
+.env.local
+.env.*
+!.env.example
