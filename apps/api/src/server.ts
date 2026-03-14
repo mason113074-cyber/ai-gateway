@@ -5,20 +5,23 @@ import {
   evaluatePolicy,
   mockApprovals,
   mockAuditEvents,
-  createDatabase,
+  createDatabaseWithRaw,
   createSqliteLogStore,
   createSqliteAgentRegistry,
   createSqliteAuditLogger,
+  createSqliteBudgetManager,
+  queryCostAttribution,
   type ActionRequest,
 } from "@agent-control-tower/domain";
 import { registerAuthMiddleware } from "./auth-middleware.js";
 import { registerProxyRoutes } from "./proxy.js";
 
 const dbPath = process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "gateway.db");
-const db = createDatabase(dbPath);
+const { db, raw } = createDatabaseWithRaw(dbPath);
 const logStore = createSqliteLogStore(db);
 const agentRegistry = createSqliteAgentRegistry(db);
 const auditLogger = createSqliteAuditLogger(db);
+const budgetManager = createSqliteBudgetManager(db, raw);
 
 const createApp = Fastify as unknown as (opts?: { logger?: boolean }) => Parameters<typeof registerProxyRoutes>[0] & {
   register: (plugin: unknown, opts?: unknown) => Promise<void>;
@@ -32,7 +35,7 @@ const createApp = Fastify as unknown as (opts?: { logger?: boolean }) => Paramet
 const app = createApp({ logger: true });
 await app.register(cors, { origin: true });
 registerAuthMiddleware(app as Parameters<typeof registerAuthMiddleware>[0]);
-registerProxyRoutes(app, agentRegistry, logStore, auditLogger);
+registerProxyRoutes(app, agentRegistry, logStore, budgetManager, auditLogger);
 
 app.get("/health", async () => {
   return { ok: true, service: "ai-gateway-api" };
@@ -115,6 +118,52 @@ app.get("/api/logs", async (request: { query?: { agentId?: string; teamId?: stri
 app.get("/api/stats", async (request: { query?: { agentId?: string; teamId?: string } }) => {
   const { agentId, teamId } = request.query ?? {};
   return logStore.getStats({ agentId, teamId });
+});
+
+app.get("/api/budgets/teams", async (request: { workspaceId?: string }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  return { items: budgetManager.listTeamBudgets(workspaceId) };
+});
+
+app.post("/api/budgets/teams", async (request: { workspaceId?: string; body?: { teamId?: string; monthlyBudgetUsd?: number; hardCap?: boolean } }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const { teamId, monthlyBudgetUsd, hardCap } = request.body ?? {};
+  if (!teamId || monthlyBudgetUsd == null) throw { statusCode: 400, message: "teamId and monthlyBudgetUsd required" };
+  budgetManager.setTeamBudget(workspaceId, teamId, Number(monthlyBudgetUsd), hardCap ?? true);
+  return budgetManager.getTeamBudget(workspaceId, teamId);
+});
+
+app.get("/api/budgets/teams/:teamId", async (request: { workspaceId?: string; params?: { teamId: string } }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const teamId = request.params?.teamId;
+  if (!teamId) throw { statusCode: 400, message: "teamId required" };
+  const budget = budgetManager.getTeamBudget(workspaceId, teamId);
+  if (!budget) throw { statusCode: 404, message: "Budget not found" };
+  return budget;
+});
+
+app.post("/api/budgets/agents", async (request: { workspaceId?: string; body?: { agentId?: string; dailyBudgetUsd?: number; hardCap?: boolean } }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const { agentId, dailyBudgetUsd, hardCap } = request.body ?? {};
+  if (!agentId || dailyBudgetUsd == null) throw { statusCode: 400, message: "agentId and dailyBudgetUsd required" };
+  budgetManager.setAgentBudget(workspaceId, agentId, Number(dailyBudgetUsd), hardCap ?? true);
+  return budgetManager.getAgentBudget(workspaceId, agentId);
+});
+
+app.get("/api/budgets/agents/:agentId", async (request: { workspaceId?: string; params?: { agentId: string } }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const agentId = request.params?.agentId;
+  if (!agentId) throw { statusCode: 400, message: "agentId required" };
+  const budget = budgetManager.getAgentBudget(workspaceId, agentId);
+  if (!budget) throw { statusCode: 404, message: "Budget not found" };
+  return budget;
+});
+
+app.get("/api/costs", async (request: { workspaceId?: string; query?: { groupBy?: string; startDate?: string; endDate?: string } }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const { groupBy, startDate, endDate } = request.query ?? {};
+  const validGroupBy = groupBy === "team" || groupBy === "agent" || groupBy === "model" || groupBy === "team,model" ? groupBy : "team";
+  return { items: queryCostAttribution(db, workspaceId, { groupBy: validGroupBy, startDate, endDate }) };
 });
 
 app.post("/api/policy/evaluate", async (request: { body: ActionRequest }) => {

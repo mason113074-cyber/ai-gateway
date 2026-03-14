@@ -1,15 +1,24 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import Database from "better-sqlite3";
+import BetterSqlite3 from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema";
 
 export type Database = ReturnType<typeof drizzle<typeof schema>>;
+export type RawDatabase = InstanceType<typeof BetterSqlite3>;
 
 export function createDatabase(dbPath: string = "./data/gateway.db"): Database {
+  const { db } = createDatabaseWithRaw(dbPath);
+  return db;
+}
+
+/** Returns both Drizzle db and raw SQLite for transactions (e.g. BEGIN IMMEDIATE in budget manager). */
+export function createDatabaseWithRaw(
+  dbPath: string = "./data/gateway.db"
+): { db: Database; raw: RawDatabase } {
   const dir = path.dirname(dbPath);
   fs.mkdirSync(dir, { recursive: true });
-  const sqlite = new Database(dbPath);
+  const sqlite = new BetterSqlite3(dbPath);
   sqlite.pragma("journal_mode = WAL");
 
   // Create tables from schema (Drizzle push equivalent for first run)
@@ -58,7 +67,33 @@ export function createDatabase(dbPath: string = "./data/gateway.db"): Database {
       outcome TEXT NOT NULL,
       metadata TEXT
     );
+    CREATE TABLE IF NOT EXISTS team_budgets (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      team_id TEXT NOT NULL,
+      monthly_budget_usd REAL NOT NULL,
+      current_spend_usd REAL NOT NULL DEFAULT 0,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      hard_cap INTEGER NOT NULL DEFAULT 1,
+      alert_threshold_pct INTEGER NOT NULL DEFAULT 80,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS agent_budgets (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      daily_budget_usd REAL NOT NULL,
+      current_spend_usd REAL NOT NULL DEFAULT 0,
+      period_start TEXT NOT NULL,
+      hard_cap INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
-  return drizzle(sqlite, { schema });
+  return { db: drizzle(sqlite, { schema }), raw: sqlite };
 }

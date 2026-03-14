@@ -2,8 +2,10 @@ import { request as undiciRequest } from "undici";
 import {
   DEFAULT_PROVIDERS,
   evaluatePolicy,
+  estimateCost,
   type LogStore,
   type AgentRegistry,
+  type BudgetManager,
   type AuditLogger,
 } from "@agent-control-tower/domain";
 
@@ -26,6 +28,7 @@ export function registerProxyRoutes(
   app: ProxyApp,
   agentRegistry: AgentRegistry,
   logStore: LogStore,
+  budgetManager: BudgetManager,
   auditLogger: AuditLogger
 ): void {
   app.all("/v1/*", async (req: unknown, reply: unknown) => {
@@ -111,6 +114,27 @@ export function registerProxyRoutes(
       });
     }
 
+    const estimatedCostUsd = estimateCost(model, 500, 500);
+    const budgetCheck = budgetManager.checkBudget(workspaceId, teamId, agentId, estimatedCostUsd);
+    if (!budgetCheck.allowed) {
+      auditLogger.log(workspaceId, {
+        eventType: "budget.exceeded",
+        actorType: "agent",
+        actorId: agentId,
+        targetType: "budget",
+        targetId: teamId,
+        action: "proxy.request",
+        outcome: "denied",
+        metadata: { reason: budgetCheck.reason, estimatedCostUsd },
+      });
+      return reply_.status(429).send({
+        error: "Budget exceeded",
+        message: budgetCheck.reason,
+        teamBudgetRemaining: budgetCheck.teamBudgetRemaining,
+        agentBudgetRemaining: budgetCheck.agentBudgetRemaining,
+      });
+    }
+
     const headers: Record<string, string> = {
       "content-type": req_.headers["content-type"] ?? "application/json",
       authorization: req_.headers["authorization"] ?? `Bearer ${apiKey}`,
@@ -180,7 +204,17 @@ export function registerProxyRoutes(
       logEntry.requestTokens = usage?.prompt_tokens ?? null;
       logEntry.responseTokens = usage?.completion_tokens ?? null;
       logEntry.totalTokens = usage?.total_tokens ?? null;
+      logEntry.costUsd = usage
+        ? estimateCost(
+            model,
+            usage.prompt_tokens ?? 0,
+            usage.completion_tokens ?? 0
+          )
+        : null;
       logStore.append(logEntry);
+      if (logEntry.costUsd != null) {
+        budgetManager.recordSpend(workspaceId, teamId, agentId, logEntry.costUsd);
+      }
       auditLogger.log(workspaceId, {
         eventType: "proxy.request",
         actorType: "agent",

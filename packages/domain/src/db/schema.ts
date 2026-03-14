@@ -51,3 +51,31 @@ export const auditLogs = sqliteTable("audit_logs", {
   outcome: text("outcome").notNull(),
   metadata: text("metadata"), // JSON
 });
+
+export const teamBudgets = sqliteTable("team_budgets", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  teamId: text("team_id").notNull(),
+  monthlyBudgetUsd: real("monthly_budget_usd").notNull(),
+  currentSpendUsd: real("current_spend_usd").notNull().default(0),
+  periodStart: text("period_start").notNull(),
+  periodEnd: text("period_end").notNull(),
+  hardCap: integer("hard_cap").notNull().default(1),
+  alertThresholdPct: integer("alert_threshold_pct").notNull().default(80),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const agentBudgets = sqliteTable("agent_budgets", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  agentId: text("agent_id").notNull(),
+  dailyBudgetUsd: real("daily_budget_usd").notNull(),
+  currentSpendUsd: real("current_spend_usd").notNull().default(0),
+  periodStart: text("period_start").notNull(),
+  hardCap: integer("hard_cap").notNull().default(1),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
