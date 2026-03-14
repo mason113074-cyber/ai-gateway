@@ -5,3 +5,8 @@ export * from "./mock";
 export * from "./proxy-types";
 export * from "./log-store";
 export * from "./agent-registry";
+export * from "./rbac";
+export * from "./api-key-manager";
+export { createDatabase, createDatabaseWithRaw } from "./db/connection.js";
+export type { Database, RawDatabase } from "./db/connection.js";
+export { createSqliteApiKeyManager } from "./db/sqlite-api-key-manager.js";

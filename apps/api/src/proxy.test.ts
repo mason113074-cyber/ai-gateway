@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
 import { registerProxyRoutes, getLogStore } from "./proxy.js";
-import { registerAuthMiddleware } from "./auth-middleware.js";
+import { registerAuthMiddleware, createLegacyOnlyApiKeyManager } from "./auth-middleware.js";
 
 const createFastify = Fastify as unknown as (opts?: object) => any;
+const legacyAuth = createLegacyOnlyApiKeyManager();
 
 describe("proxy and log APIs", () => {
   it("returns 502 for /v1/chat/completions when no upstream key configured", async () => {
     const app = createFastify();
-    registerAuthMiddleware(app);
+    registerAuthMiddleware(app, legacyAuth);
     registerProxyRoutes(app);
 
     try {
@@ -28,7 +29,7 @@ describe("proxy and log APIs", () => {
 
   it("logs x-agent-id and x-team-id when proxy is called", async () => {
     const app = createFastify();
-    registerAuthMiddleware(app);
+    registerAuthMiddleware(app, legacyAuth);
     registerProxyRoutes(app);
     const logStore = getLogStore();
 
@@ -52,7 +53,7 @@ describe("proxy and log APIs", () => {
 
   it("GET /api/logs returns logged requests", async () => {
     const app = createFastify();
-    registerAuthMiddleware(app);
+    registerAuthMiddleware(app, legacyAuth);
     registerProxyRoutes(app);
     const logStore = getLogStore();
     app.get("/api/logs", async (req: { query?: { agentId?: string; teamId?: string; limit?: string } }) => {
@@ -93,7 +94,7 @@ describe("proxy and log APIs", () => {
 
   it("GET /api/stats returns aggregated data", async () => {
     const app = createFastify();
-    registerAuthMiddleware(app);
+    registerAuthMiddleware(app, legacyAuth);
     registerProxyRoutes(app);
     const logStore = getLogStore();
     app.get("/api/stats", async (req: { query?: { agentId?: string; teamId?: string } }) => {

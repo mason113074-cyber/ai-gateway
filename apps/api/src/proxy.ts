@@ -11,6 +11,10 @@ type ProxyApp = {
   all: (path: string, handler: (req: unknown, reply: unknown) => Promise<void>) => void;
 };
 
+export type AuditLoggerForProxy = {
+  log: (workspaceId: string, event: Record<string, unknown>) => void;
+};
+
 const logStore = new InMemoryLogStore();
 
 function getUpstreamBaseUrl(provider: string): string | null {
@@ -30,7 +34,11 @@ export function getLogStore(): InMemoryLogStore {
   return logStore;
 }
 
-export function registerProxyRoutes(app: ProxyApp, agentRegistry?: AgentRegistry): void {
+export function registerProxyRoutes(
+  app: ProxyApp,
+  agentRegistry?: AgentRegistry,
+  auditLogger?: AuditLoggerForProxy
+): void {
   app.all("/v1/*", async (req: unknown, reply: unknown) => {
     const req_ = req as {
       method: string;
@@ -38,6 +46,7 @@ export function registerProxyRoutes(app: ProxyApp, agentRegistry?: AgentRegistry
       raw: { body?: { text(): Promise<string> } };
       params: { "*"?: string };
       workspaceId?: string;
+      allowedModels?: string[] | null;
     };
     type Reply = {
       status(code: number): Reply;
@@ -110,6 +119,28 @@ export function registerProxyRoutes(app: ProxyApp, agentRegistry?: AgentRegistry
         rationale: decision.rationale,
       });
       return;
+    }
+
+    if (req_.allowedModels && Array.isArray(req_.allowedModels) && req_.allowedModels.length > 0) {
+      if (!req_.allowedModels.includes(model)) {
+        if (auditLogger) {
+          auditLogger.log(workspaceId, {
+            eventType: "auth.model_denied",
+            actorType: "agent",
+            actorId: agentId,
+            targetType: "model",
+            targetId: model,
+            action: "proxy.request",
+            outcome: "denied",
+            metadata: { allowed: req_.allowedModels, requested: model },
+          });
+        }
+        reply_.status(403).send({
+          error: "Model not allowed",
+          message: `API key is not authorized to use model '${model}'. Allowed: ${req_.allowedModels.join(", ")}`,
+        });
+        return;
+      }
     }
 
     const headers: Record<string, string> = {
