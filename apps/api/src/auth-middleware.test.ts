@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
+import type { FastifyRequest } from "fastify";
 import Fastify from "fastify";
 import { registerAuthMiddleware } from "./auth-middleware.js";
 
+const createFastify = Fastify as unknown as (opts?: object) => any;
+
 describe("auth middleware and session", () => {
   it("attaches workspaceId and userId from headers to request", async () => {
-    const app = Fastify();
+    const app = createFastify();
     registerAuthMiddleware(app);
-    app.get("/session", async (request) => ({
+    app.get("/session", async (request: FastifyRequest) => ({
       workspaceId: request.workspaceId ?? null,
       userId: request.userId ?? null,
     }));
@@ -27,9 +30,9 @@ describe("auth middleware and session", () => {
   });
 
   it("returns null when headers are missing", async () => {
-    const app = Fastify();
+    const app = createFastify();
     registerAuthMiddleware(app);
-    app.get("/session", async (request) => ({
+    app.get("/session", async (request: FastifyRequest) => ({
       workspaceId: request.workspaceId ?? null,
       userId: request.userId ?? null,
     }));
