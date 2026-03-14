@@ -6,7 +6,7 @@ RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
 FROM base AS builder
 WORKDIR /app
 
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.base.json ./
 COPY packages/domain/package.json ./packages/domain/
 COPY apps/web/package.json ./apps/web/
 
