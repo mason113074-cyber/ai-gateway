@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
-import { registerAuthMiddleware } from "./auth-middleware.js";
+import { registerAuthMiddleware, createLegacyOnlyApiKeyManager } from "./auth-middleware.js";
 import { registerProxyRoutes } from "./proxy.js";
 import {
   InMemoryAgentRegistry,
@@ -10,6 +10,7 @@ import {
 } from "@agent-control-tower/domain";
 
 const createFastify = Fastify as unknown as (opts?: object) => any;
+const legacyAuth = createLegacyOnlyApiKeyManager();
 
 const mockBudgetManager: BudgetManager = {
   checkBudget: () => ({ allowed: true, reason: "", teamBudgetRemaining: 1000, agentBudgetRemaining: 100 }),
@@ -33,7 +34,7 @@ describe("agents API", () => {
     registry.ensureExists("default", "agent-1");
     const logStore = new InMemoryLogStore();
     const app = createFastify();
-    registerAuthMiddleware(app);
+    registerAuthMiddleware(app, legacyAuth);
     registerProxyRoutes(app, registry, logStore, mockBudgetManager, mockAuditLogger);
     app.get("/api/agents", async (req: { workspaceId?: string }) => {
       const workspaceId = (req as { workspaceId?: string }).workspaceId ?? "default";
@@ -59,7 +60,7 @@ describe("agents API", () => {
   it("POST /api/agents creates agent", async () => {
     const registry = new InMemoryAgentRegistry();
     const app = createFastify();
-    registerAuthMiddleware(app);
+    registerAuthMiddleware(app, legacyAuth);
     app.post("/api/agents", async (req: { body?: Record<string, unknown>; workspaceId?: string }) => {
       const workspaceId = (req as { workspaceId?: string }).workspaceId ?? "default";
       const body = req.body as Omit<import("@agent-control-tower/domain").AgentRecord, "id">;
@@ -92,9 +93,9 @@ describe("agents API", () => {
 
   it("PATCH /api/agents/:id updates agent", async () => {
     const registry = new InMemoryAgentRegistry();
-    const created = registry.ensureExists("default", "patch-me");
+    registry.ensureExists("default", "patch-me");
     const app = createFastify();
-    registerAuthMiddleware(app);
+    registerAuthMiddleware(app, legacyAuth);
     app.patch("/api/agents/:id", async (req: { params: { id: string }; body?: Record<string, unknown>; workspaceId?: string }) => {
       const workspaceId = (req as { workspaceId?: string }).workspaceId ?? "default";
       const { id } = (req as { params: { id: string } }).params;
@@ -124,7 +125,7 @@ describe("agents API", () => {
     const registry = new InMemoryAgentRegistry();
     const logStore = new InMemoryLogStore();
     const app = createFastify();
-    registerAuthMiddleware(app);
+    registerAuthMiddleware(app, legacyAuth);
     registerProxyRoutes(app, registry, logStore, mockBudgetManager, mockAuditLogger);
     app.get("/api/agents", async (req: { workspaceId?: string }) => {
       const workspaceId = (req as { workspaceId?: string }).workspaceId ?? "default";

@@ -38,6 +38,7 @@ export function registerProxyRoutes(
       method: string;
       raw?: { body?: { text: () => Promise<string> } };
       workspaceId?: string;
+      allowedModels?: string[] | null;
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const reply_ = reply as any;
@@ -120,6 +121,25 @@ export function registerProxyRoutes(
       });
     }
 
+    if (req_.allowedModels && Array.isArray(req_.allowedModels) && req_.allowedModels.length > 0) {
+      if (!req_.allowedModels.includes(model)) {
+        auditLogger.log(workspaceId, {
+          eventType: "auth.model_denied",
+          actorType: "agent",
+          actorId: agentId,
+          targetType: "model",
+          targetId: model,
+          action: "proxy.request",
+          outcome: "denied",
+          metadata: { allowed: req_.allowedModels, requested: model },
+        });
+        return reply_.status(403).send({
+          error: "Model not allowed",
+          message: `API key is not authorized to use model '${model}'. Allowed: ${req_.allowedModels.join(", ")}`,
+        });
+      }
+    }
+
     const estimatedCostUsd = estimateCost(model, 500, 500);
     const budgetCheck = budgetManager.checkBudget(workspaceId, teamId, agentId, estimatedCostUsd);
     if (!budgetCheck.allowed) {
@@ -191,9 +211,12 @@ export function registerProxyRoutes(
         reply_.status(res.statusCode).header("content-type", contentType);
         if (res.body) {
           const src = res.body as NodeJS.ReadableStream;
-          src.pipe(reply_.raw);
-          src.on("error", () => reply_.raw.end());
-        } else reply_.raw.end();
+          const rawStream = reply_.raw as NodeJS.WritableStream & { end: () => void };
+          src.pipe(rawStream);
+          src.on("error", () => rawStream.end());
+        } else {
+          (reply_.raw as NodeJS.WritableStream & { end: () => void }).end();
+        }
         return;
       }
 

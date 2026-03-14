@@ -31,8 +31,8 @@ export const agents = sqliteTable("agents", {
   sponsor: text("sponsor"),
   description: text("description"),
   status: text("status").notNull().default("active"),
-  allowedTools: text("allowed_tools"), // JSON array
-  allowedDataScopes: text("allowed_data_scopes"), // JSON array
+  allowedTools: text("allowed_tools"),
+  allowedDataScopes: text("allowed_data_scopes"),
   autoRegistered: integer("auto_registered").notNull().default(0),
   createdAt: text("created_at").notNull(),
   lastSeenAt: text("last_seen_at"),
@@ -49,7 +49,7 @@ export const auditLogs = sqliteTable("audit_logs", {
   targetId: text("target_id"),
   action: text("action").notNull(),
   outcome: text("outcome").notNull(),
-  metadata: text("metadata"), // JSON
+  metadata: text("metadata"),
 });
 
 export const teamBudgets = sqliteTable("team_budgets", {
@@ -78,4 +78,30 @@ export const agentBudgets = sqliteTable("agent_budgets", {
   status: text("status").notNull().default("active"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
+});
+
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  email: text("email").notNull(),
+  name: text("name"),
+  role: text("role").notNull().default("viewer"),
+  createdAt: text("created_at").notNull(),
+  lastLoginAt: text("last_login_at"),
+});
+
+export const apiKeys = sqliteTable("api_keys", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  userId: text("user_id"),
+  teamId: text("team_id"),
+  name: text("name").notNull(),
+  keyHash: text("key_hash").notNull(),
+  keyPrefix: text("key_prefix").notNull(),
+  permissions: text("permissions").notNull(),
+  allowedModels: text("allowed_models"),
+  rateLimit: integer("rate_limit"),
+  expiresAt: text("expires_at"),
+  lastUsedAt: text("last_used_at"),
+  createdAt: text("created_at").notNull(),
 });
