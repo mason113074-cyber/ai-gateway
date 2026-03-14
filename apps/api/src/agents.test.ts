@@ -1,18 +1,40 @@
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
 import { registerAuthMiddleware } from "./auth-middleware.js";
-import { registerProxyRoutes, getLogStore } from "./proxy.js";
-import { InMemoryAgentRegistry } from "@agent-control-tower/domain";
+import { registerProxyRoutes } from "./proxy.js";
+import {
+  InMemoryAgentRegistry,
+  InMemoryLogStore,
+  type BudgetManager,
+  type AuditLogger,
+} from "@agent-control-tower/domain";
 
 const createFastify = Fastify as unknown as (opts?: object) => any;
+
+const mockBudgetManager: BudgetManager = {
+  checkBudget: () => ({ allowed: true, reason: "", teamBudgetRemaining: 1000, agentBudgetRemaining: 100 }),
+  recordSpend: () => {},
+  setTeamBudget: () => {},
+  setAgentBudget: () => {},
+  getTeamBudget: () => null,
+  getAgentBudget: () => null,
+  listTeamBudgets: () => [],
+  resetDailyBudgets: () => {},
+  resetMonthlyBudgets: () => {},
+};
+const mockAuditLogger: AuditLogger = {
+  log: () => {},
+  query: () => ({ items: [], total: 0 }),
+};
 
 describe("agents API", () => {
   it("GET /api/agents returns list from registry", async () => {
     const registry = new InMemoryAgentRegistry();
     registry.ensureExists("default", "agent-1");
+    const logStore = new InMemoryLogStore();
     const app = createFastify();
     registerAuthMiddleware(app);
-    registerProxyRoutes(app, registry);
+    registerProxyRoutes(app, registry, logStore, mockBudgetManager, mockAuditLogger);
     app.get("/api/agents", async (req: { workspaceId?: string }) => {
       const workspaceId = (req as { workspaceId?: string }).workspaceId ?? "default";
       return { items: registry.list(workspaceId) };
@@ -100,9 +122,10 @@ describe("agents API", () => {
 
   it("proxy auto-registers unknown agent", async () => {
     const registry = new InMemoryAgentRegistry();
+    const logStore = new InMemoryLogStore();
     const app = createFastify();
     registerAuthMiddleware(app);
-    registerProxyRoutes(app, registry);
+    registerProxyRoutes(app, registry, logStore, mockBudgetManager, mockAuditLogger);
     app.get("/api/agents", async (req: { workspaceId?: string }) => {
       const workspaceId = (req as { workspaceId?: string }).workspaceId ?? "default";
       return { items: registry.list(workspaceId) };
