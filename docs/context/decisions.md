@@ -5,3 +5,4 @@
 | (setup)    | This repo is the single canonical root; Cursor OS lives with code | One repo, one root, one brain; no shell/code split | — | — |
 | (setup)    | Repo memory in docs/context/*.md | Hidden chat memory unreliable; versioned, visible source of truth | Must be updated manually or via update-memory command | Use update-memory command after meaningful changes |
 | (setup)    | Subagents as role lanes (architect, api, web, qa-security, docs-release) | Role boundaries reduce cross-cutting mistakes | Requires discipline to stay in lane | Enforce via rules and commands |
+| (T001)     | Auth middleware reads x-workspace-id / x-user-id only; no real auth | Scaffold for request context and RBAC shape | Must not be used for production authorization | Document in code and PR; add real auth in later task |
