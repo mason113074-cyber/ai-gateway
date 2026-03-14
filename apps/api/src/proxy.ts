@@ -11,6 +11,8 @@ import {
   type BudgetManager,
   type AuditLogger,
   type PiiDetectorConfig,
+  type RateLimitConfig,
+  type RateLimiter,
 } from "@agent-control-tower/domain";
 
 interface ProxyApp {
@@ -38,6 +40,16 @@ export function registerProxyRoutes(
     getPiiConfig?: (
       workspaceId: string
     ) => PiiDetectorConfig & { enabled: boolean };
+    getRateLimitConfig?: (
+      workspaceId: string,
+      teamId: string,
+      agentId: string
+    ) => {
+      teamConfig: RateLimitConfig | null;
+      agentConfig: RateLimitConfig | null;
+      globalConfig: RateLimitConfig | null;
+    };
+    rateLimiter?: RateLimiter;
   }
 ): void {
   app.all("/v1/*", async (req: unknown, reply: unknown) => {
@@ -170,6 +182,113 @@ export function registerProxyRoutes(
       });
     }
 
+    // ── Phase 9: Rate Limiting ────────────────────────────────
+    if (options?.rateLimiter && options?.getRateLimitConfig) {
+      const rlConfigs = options.getRateLimitConfig(workspaceId, teamId, agentId);
+
+      if (rlConfigs.globalConfig) {
+        const globalResult = options.rateLimiter.check(
+          `global:${workspaceId}`,
+          rlConfigs.globalConfig
+        );
+        if (!globalResult.allowed) {
+          auditLogger.log(workspaceId, {
+            eventType: "rate_limit.exceeded",
+            actorType: "agent",
+            actorId: agentId,
+            targetType: "rate_limit",
+            targetId: `global:${workspaceId}`,
+            action: "proxy.request",
+            outcome: "denied",
+            metadata: {
+              remaining: globalResult.remaining,
+              retryAfterSeconds: globalResult.retryAfterSeconds,
+            },
+          });
+          return reply_
+            .status(429)
+            .header("Retry-After", String(globalResult.retryAfterSeconds ?? 60))
+            .header("X-RateLimit-Limit", String(globalResult.limit))
+            .header("X-RateLimit-Remaining", String(globalResult.remaining))
+            .header("X-RateLimit-Reset", globalResult.resetAt)
+            .send({
+              error: "Rate limit exceeded",
+              scope: "workspace",
+              retryAfterSeconds: globalResult.retryAfterSeconds,
+            });
+        }
+      }
+
+      if (rlConfigs.teamConfig) {
+        const teamResult = options.rateLimiter.check(
+          `team:${workspaceId}:${teamId}`,
+          rlConfigs.teamConfig
+        );
+        if (!teamResult.allowed) {
+          auditLogger.log(workspaceId, {
+            eventType: "rate_limit.exceeded",
+            actorType: "agent",
+            actorId: agentId,
+            targetType: "rate_limit",
+            targetId: `team:${workspaceId}:${teamId}`,
+            action: "proxy.request",
+            outcome: "denied",
+            metadata: {
+              remaining: teamResult.remaining,
+              retryAfterSeconds: teamResult.retryAfterSeconds,
+            },
+          });
+          return reply_
+            .status(429)
+            .header("Retry-After", String(teamResult.retryAfterSeconds ?? 60))
+            .header("X-RateLimit-Limit", String(teamResult.limit))
+            .header("X-RateLimit-Remaining", String(teamResult.remaining))
+            .header("X-RateLimit-Reset", teamResult.resetAt)
+            .send({
+              error: "Rate limit exceeded",
+              scope: "team",
+              teamId,
+              retryAfterSeconds: teamResult.retryAfterSeconds,
+            });
+        }
+      }
+
+      if (rlConfigs.agentConfig) {
+        const agentResult = options.rateLimiter.check(
+          `agent:${agentId}`,
+          rlConfigs.agentConfig
+        );
+        if (!agentResult.allowed) {
+          auditLogger.log(workspaceId, {
+            eventType: "rate_limit.exceeded",
+            actorType: "agent",
+            actorId: agentId,
+            targetType: "rate_limit",
+            targetId: `agent:${agentId}`,
+            action: "proxy.request",
+            outcome: "denied",
+            metadata: {
+              remaining: agentResult.remaining,
+              retryAfterSeconds: agentResult.retryAfterSeconds,
+            },
+          });
+          return reply_
+            .status(429)
+            .header("Retry-After", String(agentResult.retryAfterSeconds ?? 60))
+            .header("X-RateLimit-Limit", String(agentResult.limit))
+            .header("X-RateLimit-Remaining", String(agentResult.remaining))
+            .header("X-RateLimit-Reset", agentResult.resetAt)
+            .send({
+              error: "Rate limit exceeded",
+              scope: "agent",
+              agentId,
+              retryAfterSeconds: agentResult.retryAfterSeconds,
+            });
+        }
+      }
+    }
+    // ── End Rate Limiting ─────────────────────────────────────
+
     // ── Phase 8: PII Guardrail ─────────────────────────────
     if (body && options?.getPiiConfig) {
       const piiConfig = options.getPiiConfig(workspaceId);
@@ -267,6 +386,38 @@ export function registerProxyRoutes(
 
       if (contentType.includes("text/event-stream")) {
         logStore.append(logEntry);
+        if (
+          options?.rateLimiter &&
+          options?.getRateLimitConfig &&
+          res.statusCode < 400
+        ) {
+          const rlConfigs = options.getRateLimitConfig(
+            workspaceId,
+            teamId,
+            agentId
+          );
+          if (rlConfigs.globalConfig)
+            options.rateLimiter.consume(
+              `global:${workspaceId}`,
+              rlConfigs.globalConfig,
+              1,
+              0
+            );
+          if (rlConfigs.teamConfig)
+            options.rateLimiter.consume(
+              `team:${teamId}`,
+              rlConfigs.teamConfig,
+              1,
+              0
+            );
+          if (rlConfigs.agentConfig)
+            options.rateLimiter.consume(
+              `agent:${agentId}`,
+              rlConfigs.agentConfig,
+              1,
+              0
+            );
+        }
         auditLogger.log(workspaceId, {
           eventType: "proxy.request",
           actorType: "agent",
@@ -308,6 +459,39 @@ export function registerProxyRoutes(
       logStore.append(logEntry);
       if (logEntry.costUsd != null) {
         budgetManager.recordSpend(workspaceId, teamId, agentId, logEntry.costUsd);
+      }
+      if (
+        options?.rateLimiter &&
+        options?.getRateLimitConfig &&
+        res.statusCode < 400
+      ) {
+        const rlConfigs = options.getRateLimitConfig(
+          workspaceId,
+          teamId,
+          agentId
+        );
+        const tokenCount = usage?.total_tokens ?? 0;
+        if (rlConfigs.globalConfig)
+          options.rateLimiter.consume(
+            `global:${workspaceId}`,
+            rlConfigs.globalConfig,
+            1,
+            tokenCount
+          );
+        if (rlConfigs.teamConfig)
+          options.rateLimiter.consume(
+            `team:${teamId}`,
+            rlConfigs.teamConfig,
+            1,
+            tokenCount
+          );
+        if (rlConfigs.agentConfig)
+          options.rateLimiter.consume(
+            `agent:${agentId}`,
+            rlConfigs.agentConfig,
+            1,
+            tokenCount
+          );
       }
       auditLogger.log(workspaceId, {
         eventType: "proxy.request",

@@ -14,6 +14,8 @@ import {
   createSqliteApiKeyManager,
   createSqliteGuardrailStore,
   getPiiConfig,
+  createSlidingWindowRateLimiter,
+  createSqliteRateLimitConfigStore,
   queryCostAttribution,
   type ActionRequest,
 } from "@agent-control-tower/domain";
@@ -29,6 +31,10 @@ const auditLogger = createSqliteAuditLogger(db);
 const budgetManager = createSqliteBudgetManager(db, raw);
 const apiKeyManager = createSqliteApiKeyManager(raw);
 const guardrailStore = createSqliteGuardrailStore(db);
+const rateLimiter = createSlidingWindowRateLimiter(raw);
+const rateLimitConfigStore = createSqliteRateLimitConfigStore(raw);
+
+setInterval(() => rateLimiter.cleanup(), 5 * 60 * 1000);
 
 const createApp = Fastify as unknown as (opts?: { logger?: boolean }) => Parameters<typeof registerProxyRoutes>[0] & {
   register: (plugin: unknown, opts?: unknown) => Promise<void>;
@@ -55,6 +61,9 @@ registerAuthMiddleware(app as Parameters<typeof registerAuthMiddleware>[0], apiK
 });
 registerProxyRoutes(app, agentRegistry, logStore, budgetManager, auditLogger, {
   getPiiConfig: (workspaceId) => getPiiConfig(guardrailStore, workspaceId),
+  getRateLimitConfig: (workspaceId, teamId, agentId) =>
+    rateLimitConfigStore.getEffectiveConfig(workspaceId, teamId, agentId),
+  rateLimiter,
 });
 
 app.get("/health", async () => {
@@ -147,6 +156,75 @@ app.patch("/api/guardrails/:id", { preHandler: [requirePermission("write:policie
   const result = guardrailStore.setEnabled(workspaceId, id, enabled);
   if (!result) throw { statusCode: 404, message: "Guardrail config not found" };
   return result;
+});
+
+app.get("/api/rate-limits", { preHandler: [requirePermission("read:costs")] }, async (request: { workspaceId?: string }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  return { items: rateLimitConfigStore.list(workspaceId) };
+});
+
+app.post("/api/rate-limits", { preHandler: [requirePermission("write:budgets")] }, async (request: {
+  workspaceId?: string;
+  body?: {
+    targetType: "team" | "agent" | "global";
+    targetId: string;
+    requestsPerMinute: number;
+    tokensPerMinute?: number;
+    burstMultiplier?: number;
+  };
+}) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const { targetType, targetId, requestsPerMinute, tokensPerMinute, burstMultiplier } = request.body ?? {};
+  if (!targetType || !targetId || requestsPerMinute == null) {
+    throw { statusCode: 400, message: "targetType, targetId, and requestsPerMinute required" };
+  }
+  return rateLimitConfigStore.upsert(workspaceId, targetType, targetId, {
+    requestsPerMinute,
+    tokensPerMinute,
+    burstMultiplier,
+  });
+});
+
+app.delete("/api/rate-limits/:id", { preHandler: [requirePermission("write:budgets")] }, async (request: {
+  workspaceId?: string;
+  params?: { id: string };
+}) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const id = request.params?.id;
+  if (!id) throw { statusCode: 400, message: "id required" };
+  const deleted = rateLimitConfigStore.remove(workspaceId, id);
+  if (!deleted) throw { statusCode: 404, message: "Rate limit config not found" };
+  return { deleted: true };
+});
+
+app.get("/api/rate-limits/status", { preHandler: [requirePermission("read:costs")] }, async (request: { workspaceId?: string }) => {
+  const workspaceId = request.workspaceId ?? "default";
+  const configs = rateLimitConfigStore.list(workspaceId);
+  type ConfigItem = (typeof configs)[number];
+  const burst = (c: ConfigItem) => c.burstMultiplier || 1.5;
+  return {
+    items: configs.map((c: ConfigItem) => {
+      const key = `${c.targetType}:${c.targetId}`;
+      const result = rateLimiter.check(key, {
+        requestsPerMinute: c.requestsPerMinute,
+        tokensPerMinute: c.tokensPerMinute ?? undefined,
+        burstMultiplier: c.burstMultiplier,
+      });
+      const effectiveLimit = c.requestsPerMinute * 2 * burst(c);
+      const utilizationPct = effectiveLimit > 0
+        ? Math.round((1 - result.remaining / effectiveLimit) * 100)
+        : 0;
+      return {
+        ...c,
+        currentUsage: {
+          remaining: result.remaining,
+          limit: result.limit,
+          resetAt: result.resetAt,
+          utilizationPct: Math.min(100, Math.max(0, utilizationPct)),
+        },
+      };
+    }),
+  };
 });
 
 app.get("/api/logs", { preHandler: [requirePermission("read:logs")] }, async (request: { query?: { agentId?: string; teamId?: string; limit?: string } }) => {
