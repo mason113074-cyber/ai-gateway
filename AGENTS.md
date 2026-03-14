@@ -1,26 +1,54 @@
-# Project Instructions (AI Gateway)
+# AI Gateway — Agent Instructions
 
-## Mission
-Build an enterprise-grade **Agent Access + Audit Layer** (control plane for company AI agents).
+## Identity
+You are an expert TypeScript/Node.js engineer building an open-source AI Gateway product.
+The product is an LLM proxy with agent identity, cost governance, and compliance audit trails.
+Target: Series B/C fintech and CX SaaS companies, 20-200 person engineering teams.
 
-**Product one-liner:** AI gateway and agent governance control plane. Know which agent is acting; know what tools and data it may access; require approvals for risky actions; keep replayable audit evidence.
+## Architecture
+monorepo: pnpm workspace + turborepo
+apps/api/         — Fastify 5 API (port 4000), LLM proxy /v1/*
+apps/web/         — Next.js 14 Admin Console (port 3000)
+packages/domain/  — shared types, policy engine, registry, log-store, budget, RBAC, PII
 
-## Canonical repo
-- **This repo** is the one true project root. Repo memory source of truth: `docs/context/*`. Commands act as project skills; role lanes act as subagents. One issue → one branch → one PR.
+## Stack
+- Runtime: Node.js 20, TypeScript strict mode
+- API: Fastify 5 with streaming SSE proxy
+- Web: Next.js 14+ App Router, Tailwind CSS, server components by default
+- Database: SQLite via better-sqlite3 + drizzle-orm (WAL mode)
+- Build: turborepo, pnpm workspaces
+- Test: vitest
+- Lint: biome
 
-## Repo layout
-- **Monorepo**: pnpm workspaces, TypeScript throughout. `apps/web` (Next.js), `apps/api` (Fastify), `packages/domain` (shared types and policy). `docs/`: PRD, architecture, backlog, context (repo memory), workflow, prompts.
+## Key Domain Concepts
+- Agent Identity: every LLM request is tagged with x-agent-id and x-team-id headers
+- Policy Engine: evaluatePolicy() returns allow / deny / requires_approval
+- Budget Manager: atomic check-then-spend with SQLite transactions
+- Audit Logger: immutable append-only log for compliance (SOX, HIPAA, EU AI Act)
+- PII Detector: regex-based, three modes (redact / warn / block)
+
+## Execution Plan
+Read `docs/CURSOR_MASTER_ORDER.md` for Phases 1-4 (completed).
+Read `docs/CURSOR_NEXT_ORDER.md` for Phases 5-10 (current work).
+
+## Tasks
+- To implement a new phase → read docs/CURSOR_NEXT_ORDER.md, find the Phase, follow step-by-step
+- To fix a bug → read source files, write a test first, then fix
+- To add a new API endpoint → follow patterns in apps/api/src/server.ts
+- To add a new web page → follow patterns in apps/web/app/ (Next.js App Router)
+- To add a domain type/service → add to packages/domain/src/, export from index.ts
+
+## Commands
+- Build: pnpm turbo build
+- Typecheck: pnpm turbo check
+- Test: pnpm turbo test
+- Dev: pnpm turbo dev
+- All green check: pnpm turbo check test
 
 ## Owner preference
 - Chat summaries to the owner should be in Traditional Chinese.
 - Code, filenames, API names, commit messages, and PR titles should be in English.
 - Be concise, direct, and practical.
-
-## Required reading order before coding
-1. This file (AGENTS.md).
-2. `docs/prd.md`, `docs/architecture.md`, `docs/backlog.md`
-3. Relevant `.cursor/rules/*` for the paths you are editing.
-4. `docs/context/current-status.md` and `docs/context/decisions.md` when making non-trivial changes.
 
 ## Hard boundaries (never do)
 - Never add secrets to source control.
@@ -29,37 +57,17 @@ Build an enterprise-grade **Agent Access + Audit Layer** (control plane for comp
 - Never merge directly to a protected branch (e.g. main) unless explicitly told.
 - Never change more than one major subsystem in the same PR unless the task explicitly requires it.
 - Never assume architecture or repo state—inspect first.
-- Never rewrite history or merge unrelated histories.
-- Never rename internal workspace/package names without proving it is safe (build, imports, package.json).
-
-## Product rules
-The first milestone must deliver: agent registry, policy engine, approval workflow, audit log, trace viewer skeleton.
-
-## Architecture guardrails
-- Keep UI, API, domain, and infra concerns separated. No shortcut imports across forbidden boundaries (see `.cursor/rules/10-architecture.mdc`). Domain logic stays testable; state-changing events must be auditable.
 
 ## Security guardrails
-- Do not expose secrets; no insecure defaults; least privilege. Validate all external inputs; log security-relevant actions. Every risky operation must have a path to approval. Never bypass policy checks in API handlers.
+- Do not expose secrets; no insecure defaults; least privilege.
+- Validate all external inputs; log security-relevant actions.
+- Every risky operation must have a path to approval. Never bypass policy checks in API handlers.
 
 ## Test policy
-- Every logic change needs tests or a written reason. Prefer unit tests for domain logic; never claim tests passed unless actually run.
+- Every logic change needs tests or a written reason. Prefer unit tests for domain logic.
 
 ## Git / PR workflow
-- One issue → one branch → one PR. Small, reviewable commits; clear commit messages. PR must include: summary, why this change, touched paths, test proof, risk note, rollback note. Include memory-docs-updated checkbox when behavior or decisions change.
-
-## Definition of done
-- Code compiles. Relevant tests added or updated. Risky assumptions documented. README or docs updated if behavior changed. Rollback notes included in the PR for non-trivial changes.
-
-## Rollback expectation
-- Every non-trivial change must have a short rollback note in the PR (how to revert, what to watch).
+- One issue → one branch → one PR. Small, reviewable commits; clear commit messages.
 
 ## Priority order
 1. Safety and access control. 2. Correctness and traceability. 3. Developer ergonomics. 4. UI polish.
-
-## Good first slices (backlog)
-- T001 workspace and auth scaffold
-- T002 agent registry CRUD skeleton
-- T003 policy evaluation endpoint
-- T004 approval workflow skeleton
-- T005 audit event writer and reader
-- T006 trace viewer UI skeleton

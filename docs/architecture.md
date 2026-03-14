@@ -3,50 +3,65 @@
 ## High-level view
 
 ```text
-Users / Operators
+AI Agents (any LLM caller)
+      ↓  change base URL to gateway
+Fastify LLM Proxy (/v1/*)
+      ↓  x-agent-id / x-team-id headers
+Policy Engine → allow / deny / requires_approval
       ↓
-Next.js Admin Console
+Upstream LLM (OpenAI, Anthropic, etc.)
       ↓
-Fastify Control API
-      ↓
-Policy Engine + Registry + Approval Service + Audit Writer
-      ↓
-Future integrations: DB, IAM, MCP connectors, external tools
+Audit Log + Cost Tracking + PII Detection
 ```
 
 ## Layers
 
-### Web
-Admin console for:
-- agent registry
-- pending approvals
-- audit event review
-- future trace replay
+### Web (apps/web)
+Next.js 14+ Admin Console:
+- Dashboard: cost overview, request stats
+- Agent registry: list, edit, status
+- Logs: request log viewer
+- Approvals: pending approval queue
+- Audit: compliance event viewer
 
-### API
-HTTP boundary for:
-- health
-- registry endpoints
-- approvals endpoints
-- audit endpoints
-- policy evaluation
+### API (apps/api)
+Fastify 5 with:
+- /v1/* — LLM proxy with streaming SSE passthrough
+- /api/agents — Agent registry CRUD
+- /api/logs — Request log query
+- /api/stats — Cost and usage stats
+- Auth middleware (x-workspace-id / x-user-id headers)
 
-### Domain
+### Domain (packages/domain)
 Shared logic and types:
-- policy decision logic
-- agent and audit types
-- mock data for early UI/API development
+- Policy engine (evaluatePolicy → allow/deny/requires_approval)
+- Agent registry (auto-register on first request)
+- Log store (InMemoryLogStore, will migrate to SQLite)
+- Workspace and RBAC types
+- Proxy types and cost estimation
 
-## Future extensions
-- Postgres persistence
-- Redis job queue
-- SSO / RBAC
-- MCP connector gateway
-- trace storage and replay UI
-- webhook / event bus
+## Database (Phase 5+)
+- SQLite via better-sqlite3 + drizzle-orm
+- WAL mode for concurrent reads
+- BEGIN IMMEDIATE for atomic budget enforcement
+- Tables: agents, proxy_logs, budgets, policy_rules, audit_events
 
-## Principles
-- keep domain logic testable
-- make state-changing events auditable
-- separate product rules from framework glue
-- avoid premature complexity
+## Key decisions
+- SQLite over PostgreSQL: simpler deployment for solo founder, sufficient for <10K agents
+- Agent identity via x-agent-id header: differentiator vs competitors (request-level only)
+- MIT proxy + closed-source governance: validated by Helicone/Langfuse/LiteLLM patterns
+- Streaming SSE passthrough: no buffering, preserves OpenAI/Anthropic response format
+
+## Completed phases (on main)
+- Phase 1: LLM Proxy Layer
+- Phase 2: Agent Registry + Auto-register
+- Phase 3: Policy Engine (allow/deny/requires_approval)
+- Phase 4: Dashboard + README
+
+## Next phases (see docs/CURSOR_NEXT_ORDER.md)
+- Phase 5: Persistent Storage + Audit Logs (SQLite)
+- Phase 6: Budget Enforcement
+- Phase 7: PII Detection
+- Phase 8: RBAC + API Keys
+- Phase 9: Multi-Provider Router
+- Phase 10: Compliance Export

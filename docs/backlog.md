@@ -1,39 +1,42 @@
-# Backlog
+# Backlog — AI Gateway
 
-## T001 Workspace and auth scaffold
-- add tenant/workspace concept
-- add auth middleware placeholder
-- prepare RBAC shape
+> Phases 1-4 completed and on main. See docs/CURSOR_MASTER_ORDER.md for history.
+> Phases 5-10 are the current roadmap. See docs/CURSOR_NEXT_ORDER.md for detailed step-by-step instructions.
 
-## T002 Agent registry CRUD skeleton
-- create list/create/update endpoints
-- add persistent storage interface
-- render create/edit forms
+## Phase 5: Persistent Storage + Audit Logs (NEXT)
+- Install better-sqlite3 + drizzle-orm
+- Create schema: agents, proxy_logs, budgets, policy_rules, audit_events
+- Migrate InMemoryLogStore → SQLite
+- Migrate InMemoryAgentRegistry → SQLite
+- Immutable audit_events table with timestamp indexing
+- GET /api/audit endpoint
 
-## T003 Policy engine endpoint
-- expand policy evaluation logic
-- add deny / allow / requires_approval decisions
-- store rationale
+## Phase 6: Budget Enforcement
+- Budget table (agent/team level, daily/monthly)
+- Atomic check-then-spend with BEGIN IMMEDIATE
+- 403 response when budget exhausted
+- Budget dashboard cards
 
-## T004 Approval workflow
-- create approval request endpoint
-- add approve / reject actions
-- show pending queue in UI
+## Phase 7: PII Detection
+- Regex-based PII detector (SSN, credit card, email, phone)
+- Three modes: redact / warn / block
+- Per-agent PII policy configuration
+- Audit log for PII events
 
-## T005 Audit writer and reader
-- create audit event store abstraction
-- write events for state changes
-- render filtered event list
+## Phase 8: RBAC + API Keys
+- API key management (create, rotate, revoke)
+- Role-based access control (admin, viewer, agent-owner)
+- SSO-ready authentication flow
+- Key scoping (per-workspace, per-agent)
 
-## T006 Trace viewer skeleton
-- model trace spans and steps
-- show step timeline in UI
+## Phase 9: Multi-Provider Router
+- Anthropic Messages API support
+- Azure OpenAI support
+- Smart routing (cost, latency, availability)
+- Provider health checks
 
-## T007 MCP connector scaffold
-- create connector abstraction
-- wire read-only example connector first
-
-## T008 Admin dashboard hardening
-- loading states
-- error boundaries
-- basic role checks
+## Phase 10: Compliance Export
+- SOC 2 audit report export
+- HIPAA access log export
+- EU AI Act high-risk system documentation
+- CSV/JSON export for auditors
