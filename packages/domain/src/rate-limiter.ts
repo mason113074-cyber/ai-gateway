@@ -56,7 +56,7 @@ export function createSlidingWindowRateLimiter(raw: RawDatabase): RateLimiter {
     key: string,
     windowMinutes: number = 2
   ): { totalCount: number; totalTokens: number } {
-    const cutoff = getCurrentMinute() - windowMinutes;
+    const cutoff = getCurrentMinute() - (windowMinutes - 1);
     const row = getWindowStmt.get(key, cutoff) as
       | { total_count: number; total_tokens: number }
       | undefined;
