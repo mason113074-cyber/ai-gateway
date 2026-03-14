@@ -1,34 +1,24 @@
 name: CI
 
-on:
-  push:
-    branches: [main]
-  pull_request:
+on: [push, pull_request]
 
 jobs:
-  ci:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo check
+      - run: pnpm turbo test
+      - run: pnpm turbo build
 
-      # Use pnpm version from package.json "packageManager" only (omit version here to avoid "Multiple versions of pnpm specified")
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Check
-        run: pnpm check
-
-      - name: Test
-        run: pnpm test
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
