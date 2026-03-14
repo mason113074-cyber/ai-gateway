@@ -221,7 +221,7 @@ export function registerProxyRoutes(
 
       if (rlConfigs.teamConfig) {
         const teamResult = options.rateLimiter.check(
-          `team:${teamId}`,
+          `team:${workspaceId}:${teamId}`,
           rlConfigs.teamConfig
         );
         if (!teamResult.allowed) {
@@ -230,7 +230,7 @@ export function registerProxyRoutes(
             actorType: "agent",
             actorId: agentId,
             targetType: "rate_limit",
-            targetId: `team:${teamId}`,
+            targetId: `team:${workspaceId}:${teamId}`,
             action: "proxy.request",
             outcome: "denied",
             metadata: {
