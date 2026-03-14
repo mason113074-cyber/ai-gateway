@@ -1,6 +1,7 @@
 import { request as undiciRequest } from "undici";
 import {
   DEFAULT_PROVIDERS,
+  evaluatePolicy,
   InMemoryLogStore,
   type AgentRegistry,
   type ProxyRequestLog,
@@ -95,6 +96,20 @@ export function registerProxyRoutes(app: ProxyApp, agentRegistry?: AgentRegistry
       }
     } catch {
       // no body
+    }
+
+    const decision = evaluatePolicy({
+      actionType: "write",
+      target: model,
+      external: true,
+      amount: undefined,
+    });
+    if (decision.verdict === "deny") {
+      reply_.status(403).send({
+        error: "Policy denied",
+        rationale: decision.rationale,
+      });
+      return;
     }
 
     const headers: Record<string, string> = {

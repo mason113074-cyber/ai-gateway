@@ -21,10 +21,14 @@ export interface ActionRequest {
   containsPii?: boolean;
 }
 
+export type PolicyVerdict = "allow" | "deny" | "requires_approval";
+
 export interface PolicyDecision {
+  verdict: PolicyVerdict;
   riskLevel: RiskLevel;
   requiresApproval: boolean;
   reasons: string[];
+  rationale: string;
 }
 
 export interface ApprovalRecord {
