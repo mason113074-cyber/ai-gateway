@@ -1,24 +1,34 @@
 import type { ProxyRequestLog } from "./proxy-types";
 
 export interface LogStore {
-  append(log: ProxyRequestLog): void;
+  append(log: ProxyRequestLog): void | Promise<void>;
   list(opts?: {
     agentId?: string;
     teamId?: string;
     limit?: number;
-  }): ProxyRequestLog[];
+  }): ProxyRequestLog[] | Promise<ProxyRequestLog[]>;
   getStats(opts?: {
     agentId?: string;
     teamId?: string;
-  }): {
-    totalRequests: number;
-    totalCostUsd: number;
-    totalTokens: number;
-    byModel: Record<
-      string,
-      { requests: number; costUsd: number; tokens: number }
-    >;
-  };
+  }):
+    | {
+        totalRequests: number;
+        totalCostUsd: number;
+        totalTokens: number;
+        byModel: Record<
+          string,
+          { requests: number; costUsd: number; tokens: number }
+        >;
+      }
+    | Promise<{
+        totalRequests: number;
+        totalCostUsd: number;
+        totalTokens: number;
+        byModel: Record<
+          string,
+          { requests: number; costUsd: number; tokens: number }
+        >;
+      }>;
 }
 
 export class InMemoryLogStore implements LogStore {

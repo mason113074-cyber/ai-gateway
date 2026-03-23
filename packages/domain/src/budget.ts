@@ -35,28 +35,34 @@ export interface BudgetManager {
     teamId: string,
     agentId: string,
     estimatedCostUsd: number
-  ): BudgetCheckResult;
+  ): BudgetCheckResult | Promise<BudgetCheckResult>;
   recordSpend(
     workspaceId: string,
     teamId: string,
     agentId: string,
     costUsd: number
-  ): void;
+  ): void | Promise<void>;
   setTeamBudget(
     workspaceId: string,
     teamId: string,
     monthlyBudgetUsd: number,
     hardCap?: boolean
-  ): void;
+  ): void | Promise<void>;
   setAgentBudget(
     workspaceId: string,
     agentId: string,
     dailyBudgetUsd: number,
     hardCap?: boolean
-  ): void;
-  getTeamBudget(workspaceId: string, teamId: string): TeamBudget | null;
-  getAgentBudget(workspaceId: string, agentId: string): AgentBudget | null;
-  listTeamBudgets(workspaceId: string): TeamBudget[];
-  resetDailyBudgets(workspaceId: string): void;
-  resetMonthlyBudgets(workspaceId: string): void;
+  ): void | Promise<void>;
+  getTeamBudget(
+    workspaceId: string,
+    teamId: string
+  ): TeamBudget | null | Promise<TeamBudget | null>;
+  getAgentBudget(
+    workspaceId: string,
+    agentId: string
+  ): AgentBudget | null | Promise<AgentBudget | null>;
+  listTeamBudgets(workspaceId: string): TeamBudget[] | Promise<TeamBudget[]>;
+  resetDailyBudgets(workspaceId: string): void | Promise<void>;
+  resetMonthlyBudgets(workspaceId: string): void | Promise<void>;
 }

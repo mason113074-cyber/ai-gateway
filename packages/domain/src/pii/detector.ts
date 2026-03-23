@@ -86,7 +86,7 @@ const PII_PATTERNS: Record<
   },
   api_key: {
     regex:
-      /\b(?:sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36}|gw-[a-f0-9]{32}|AKIA[0-9A-Z]{16})\b/g,
+      /\b(?:sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36}|gw-[a-f0-9]{32}|AKIA[0-9A-Z]{16}|xox[baprs]-[a-zA-Z0-9-]{10,}|SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}|[a-zA-Z0-9]{32,40})\b/g,
     replacement: "[API_KEY_REDACTED]",
   },
 };

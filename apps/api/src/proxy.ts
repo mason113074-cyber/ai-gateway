@@ -6,6 +6,7 @@ import {
   detectPii,
   redactRequestBody,
   extractPromptText,
+  getNextProvider,
   type LogStore,
   type AgentRegistry,
   type BudgetManager,
@@ -69,12 +70,12 @@ export function registerProxyRoutes(
     const provider = (req_.headers["x-provider"] as string) ?? "openai";
     const workspaceId = (req as { workspaceId?: string }).workspaceId ?? "default";
 
-    agentRegistry.ensureExists(workspaceId, agentId);
+    await agentRegistry.ensureExists(workspaceId, agentId);
 
     const baseUrl = getUpstreamBaseUrl(provider);
     const apiKey = getUpstreamApiKey(provider);
     if (!baseUrl) {
-      auditLogger.log(workspaceId, {
+      await auditLogger.log(workspaceId, {
         eventType: "proxy.request",
         actorType: "agent",
         actorId: agentId,
@@ -86,7 +87,7 @@ export function registerProxyRoutes(
       return reply_.status(404).send({ error: "Unknown provider", provider });
     }
     if (!apiKey) {
-      auditLogger.log(workspaceId, {
+      await auditLogger.log(workspaceId, {
         eventType: "proxy.request",
         actorType: "agent",
         actorId: agentId,
@@ -126,7 +127,7 @@ export function registerProxyRoutes(
       external: true,
     });
     if (decision.requiresApproval) {
-      auditLogger.log(workspaceId, {
+      await auditLogger.log(workspaceId, {
         eventType: "policy.requires_approval",
         actorType: "agent",
         actorId: agentId,
@@ -144,7 +145,7 @@ export function registerProxyRoutes(
 
     if (req_.allowedModels && Array.isArray(req_.allowedModels) && req_.allowedModels.length > 0) {
       if (!req_.allowedModels.includes(model)) {
-        auditLogger.log(workspaceId, {
+        await auditLogger.log(workspaceId, {
           eventType: "auth.model_denied",
           actorType: "agent",
           actorId: agentId,
@@ -162,9 +163,9 @@ export function registerProxyRoutes(
     }
 
     const estimatedCostUsd = estimateCost(model, 500, 500);
-    const budgetCheck = budgetManager.checkBudget(workspaceId, teamId, agentId, estimatedCostUsd);
+    const budgetCheck = await budgetManager.checkBudget(workspaceId, teamId, agentId, estimatedCostUsd);
     if (!budgetCheck.allowed) {
-      auditLogger.log(workspaceId, {
+      await auditLogger.log(workspaceId, {
         eventType: "budget.exceeded",
         actorType: "agent",
         actorId: agentId,
@@ -192,7 +193,7 @@ export function registerProxyRoutes(
           rlConfigs.globalConfig
         );
         if (!globalResult.allowed) {
-          auditLogger.log(workspaceId, {
+          await auditLogger.log(workspaceId, {
             eventType: "rate_limit.exceeded",
             actorType: "agent",
             actorId: agentId,
@@ -225,7 +226,7 @@ export function registerProxyRoutes(
           rlConfigs.teamConfig
         );
         if (!teamResult.allowed) {
-          auditLogger.log(workspaceId, {
+          await auditLogger.log(workspaceId, {
             eventType: "rate_limit.exceeded",
             actorType: "agent",
             actorId: agentId,
@@ -259,7 +260,7 @@ export function registerProxyRoutes(
           rlConfigs.agentConfig
         );
         if (!agentResult.allowed) {
-          auditLogger.log(workspaceId, {
+          await auditLogger.log(workspaceId, {
             eventType: "rate_limit.exceeded",
             actorType: "agent",
             actorId: agentId,
@@ -356,11 +357,43 @@ export function registerProxyRoutes(
     if (req_.headers["x-api-key"]) headers["x-api-key"] = req_.headers["x-api-key"] as string;
 
     try {
-      const res = await undiciRequest(upstreamUrl, {
-        method: req_.method,
-        headers,
-        body: body ?? undefined,
-      });
+      let currentProvider = provider;
+      let currentApiKey = apiKey;
+      let currentUpstreamUrl = upstreamUrl;
+      let res: any;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        res = await undiciRequest(currentUpstreamUrl, {
+          method: req_.method as any,
+          headers: {
+            ...headers,
+            authorization: `Bearer ${currentApiKey}`,
+            ...(currentProvider === "anthropic" && { "x-api-key": currentApiKey, "anthropic-version": "2023-06-01" }),
+          },
+          body: body ?? undefined,
+        });
+
+        if (res.statusCode < 400 || ![429, 500, 502, 503, 504].includes(res.statusCode)) {
+          break;
+        }
+
+        const nextProvider = getNextProvider(currentProvider);
+        if (!nextProvider) break;
+
+        const nextApiKey = getUpstreamApiKey(nextProvider);
+        const nextBaseUrl = getUpstreamBaseUrl(nextProvider);
+        if (!nextApiKey || !nextBaseUrl) break;
+
+        currentProvider = nextProvider;
+        currentApiKey = nextApiKey;
+        currentUpstreamUrl = `${nextBaseUrl.replace(/\/$/, "")}/v1/${pathSeg}`;
+        
+        console.log(`Fallback: Switching from ${provider} to ${currentProvider} due to status ${res.statusCode}`);
+      }
+
       const latencyMs = Date.now() - startTime;
       reply_.header("x-proxy-latency-ms", String(latencyMs));
       const contentType =
@@ -372,7 +405,7 @@ export function registerProxyRoutes(
         workspaceId,
         agentId,
         teamId,
-        provider,
+        provider: currentProvider,
         model,
         endpoint: `/v1/${pathSeg}`,
         requestTokens: null as number | null,
@@ -385,7 +418,7 @@ export function registerProxyRoutes(
       };
 
       if (contentType.includes("text/event-stream")) {
-        logStore.append(logEntry);
+        await logStore.append(logEntry);
         if (
           options?.rateLimiter &&
           options?.getRateLimitConfig &&
@@ -418,7 +451,7 @@ export function registerProxyRoutes(
               0
             );
         }
-        auditLogger.log(workspaceId, {
+        await auditLogger.log(workspaceId, {
           eventType: "proxy.request",
           actorType: "agent",
           actorId: agentId,
@@ -456,9 +489,9 @@ export function registerProxyRoutes(
       logEntry.costUsd = usage
         ? estimateCost(model, usage.prompt_tokens ?? 0, usage.completion_tokens ?? 0)
         : null;
-      logStore.append(logEntry);
+      await logStore.append(logEntry);
       if (logEntry.costUsd != null) {
-        budgetManager.recordSpend(workspaceId, teamId, agentId, logEntry.costUsd);
+        await budgetManager.recordSpend(workspaceId, teamId, agentId, logEntry.costUsd);
       }
       if (
         options?.rateLimiter &&

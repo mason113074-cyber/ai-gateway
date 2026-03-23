@@ -11,7 +11,7 @@ export interface AuditEntry {
 }
 
 export interface AuditLogger {
-  log(workspaceId: string, entry: Omit<AuditEntry, "id">): void;
+  log(workspaceId: string, entry: Omit<AuditEntry, "id">): void | Promise<void>;
   query(opts: {
     workspaceId: string;
     eventType?: string;
@@ -20,5 +20,7 @@ export interface AuditLogger {
     endDate?: string;
     limit?: number;
     offset?: number;
-  }): { items: (AuditEntry & { timestamp: string })[]; total: number };
+  }):
+    | { items: (AuditEntry & { timestamp: string })[]; total: number }
+    | Promise<{ items: (AuditEntry & { timestamp: string })[]; total: number }>;
 }

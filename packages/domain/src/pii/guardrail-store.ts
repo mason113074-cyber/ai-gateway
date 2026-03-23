@@ -1,7 +1,9 @@
 import { eq, and } from "drizzle-orm";
 import type { Database } from "../db/connection.js";
-import { guardrailConfigs } from "../db/schema.js";
+import schema from "../db/schema.js";
 import type { PiiDetectorConfig, PiiType } from "./detector.js";
+
+const { guardrailConfigs } = schema;
 
 export interface GuardrailConfig {
   id: string;
@@ -14,49 +16,41 @@ export interface GuardrailConfig {
 }
 
 export interface GuardrailStore {
-  get(workspaceId: string, type: string): GuardrailConfig | null;
+  get(workspaceId: string, type: string): GuardrailConfig | null | Promise<GuardrailConfig | null>;
   upsert(
     workspaceId: string,
     type: string,
     config: PiiDetectorConfig,
     enabled?: boolean
-  ): GuardrailConfig;
-  list(workspaceId: string): GuardrailConfig[];
+  ): GuardrailConfig | Promise<GuardrailConfig>;
+  list(workspaceId: string): GuardrailConfig[] | Promise<GuardrailConfig[]>;
   setEnabled(
     workspaceId: string,
     id: string,
     enabled: boolean
-  ): GuardrailConfig | null;
+  ): GuardrailConfig | null | Promise<GuardrailConfig | null>;
 }
 
-function rowToConfig(row: {
-  id: string;
-  workspaceId: string;
-  type: string;
-  config: string;
-  enabled: number;
-  createdAt: string;
-  updatedAt: string;
-}): GuardrailConfig {
-  const parsed = JSON.parse(row.config) as {
-    enabledTypes: PiiType[];
-    action: "redact" | "warn" | "block";
-  };
+function rowToConfig(row: any): GuardrailConfig {
+  const parsed = typeof row.config === 'string' ? JSON.parse(row.config) : row.config;
   return {
     id: row.id,
     workspaceId: row.workspaceId,
     type: row.type,
     config: parsed,
     enabled: row.enabled !== 0,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
   };
 }
 
-export function createSqliteGuardrailStore(db: Database): GuardrailStore {
+export function createGuardrailStore(db: Database): GuardrailStore {
+  const isPg = "execute" in db && !("run" in db);
+  const now = () => isPg ? new Date() : new Date().toISOString();
+
   return {
-    get(workspaceId: string, type: string): GuardrailConfig | null {
-      const row = db
+    async get(workspaceId: string, type: string): Promise<GuardrailConfig | null> {
+      const query = db
         .select()
         .from(guardrailConfigs)
         .where(
@@ -64,44 +58,60 @@ export function createSqliteGuardrailStore(db: Database): GuardrailStore {
             eq(guardrailConfigs.workspaceId, workspaceId),
             eq(guardrailConfigs.type, type)
           )
-        )
-        .get();
+        );
+      const row = isPg ? (await (query as any).execute())[0] : (query as any).get();
       if (!row) return null;
       return rowToConfig(row);
     },
 
-    upsert(
+    async upsert(
       workspaceId: string,
       type: string,
       config: PiiDetectorConfig,
       enabled: boolean = true
-    ): GuardrailConfig {
+    ): Promise<GuardrailConfig> {
       const id = `${workspaceId}:${type}`;
-      const now = new Date().toISOString();
+      const currentTime = now();
       const configJson = JSON.stringify({
         enabledTypes: config.enabledTypes,
         action: config.action,
       });
 
-      db.insert(guardrailConfigs)
-        .values({
-          id,
-          workspaceId,
-          type,
-          config: configJson,
-          enabled: enabled ? 1 : 0,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: guardrailConfigs.id,
-          set: {
-            config: configJson,
-            enabled: enabled ? 1 : 0,
-            updatedAt: now,
-          },
-        })
-        .run();
+      const values = {
+        id,
+        workspaceId,
+        type,
+        config: configJson,
+        enabled: enabled ? 1 : 0,
+        createdAt: currentTime,
+        updatedAt: currentTime,
+      };
+
+      if (isPg) {
+        await (db as any).insert(guardrailConfigs)
+          .values(values)
+          .onConflictDoUpdate({
+            target: guardrailConfigs.id,
+            set: {
+              config: configJson,
+              enabled: enabled ? 1 : 0,
+              updatedAt: currentTime,
+            },
+          })
+          .execute();
+      } else {
+        (db as any).insert(guardrailConfigs)
+          .values(values)
+          .onConflictDoUpdate({
+            target: guardrailConfigs.id,
+            set: {
+              config: configJson,
+              enabled: enabled ? 1 : 0,
+              updatedAt: currentTime,
+            },
+          })
+          .run();
+      }
 
       return {
         id,
@@ -109,62 +119,55 @@ export function createSqliteGuardrailStore(db: Database): GuardrailStore {
         type,
         config,
         enabled,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: currentTime instanceof Date ? currentTime.toISOString() : currentTime,
+        updatedAt: currentTime instanceof Date ? currentTime.toISOString() : currentTime,
       };
     },
 
-    list(workspaceId: string): GuardrailConfig[] {
-      const rows = db
+    async list(workspaceId: string): Promise<GuardrailConfig[]> {
+      const query = db
         .select()
         .from(guardrailConfigs)
-        .where(eq(guardrailConfigs.workspaceId, workspaceId))
-        .all();
+        .where(eq(guardrailConfigs.workspaceId, workspaceId));
+      const rows = isPg ? await (query as any).execute() : (query as any).all();
       return rows.map(rowToConfig);
     },
 
-    setEnabled(
+    async setEnabled(
       workspaceId: string,
       id: string,
       enabled: boolean
-    ): GuardrailConfig | null {
-      const row = db
-        .select()
-        .from(guardrailConfigs)
+    ): Promise<GuardrailConfig | null> {
+      const existing = await this.get(workspaceId, id);
+      if (!existing) return null;
+
+      const currentTime = now();
+      const updateQuery = db.update(guardrailConfigs)
+        .set({ enabled: enabled ? 1 : 0, updatedAt: currentTime })
         .where(
           and(
             eq(guardrailConfigs.id, id),
             eq(guardrailConfigs.workspaceId, workspaceId)
           )
-        )
-        .get();
-      if (!row) return null;
+        );
+      
+      if (isPg) await (updateQuery as any).execute(); else (updateQuery as any).run();
 
-      db.update(guardrailConfigs)
-        .set({ enabled: enabled ? 1 : 0, updatedAt: new Date().toISOString() })
-        .where(
-          and(
-            eq(guardrailConfigs.id, id),
-            eq(guardrailConfigs.workspaceId, workspaceId)
-          )
-        )
-        .run();
-
-      return rowToConfig({
-        ...row,
-        enabled: enabled ? 1 : 0,
-        updatedAt: new Date().toISOString(),
-      });
+      return {
+        ...existing,
+        enabled,
+        updatedAt: currentTime instanceof Date ? currentTime.toISOString() : currentTime,
+      };
     },
   };
 }
 
 /** Get PII config for a workspace, falling back to defaults if not configured */
-export function getPiiConfig(
+export async function getPiiConfig(
   store: GuardrailStore,
   workspaceId: string
-): PiiDetectorConfig & { enabled: boolean } {
-  const config = store.get(workspaceId, "pii_redaction");
+): Promise<PiiDetectorConfig & { enabled: boolean }> {
+  const config = await store.get(workspaceId, "pii_redaction");
   if (!config) {
     return {
       enabledTypes: ["email", "phone", "ssn", "credit_card", "api_key"],

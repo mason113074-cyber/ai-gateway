@@ -10,19 +10,20 @@ export * from "./budget";
 export * from "./cost-estimator";
 export * from "./rbac";
 export * from "./api-key-manager";
+export * from "./fallback";
 export { createDatabase, createDatabaseWithRaw } from "./db/connection.js";
 export type { Database, RawDatabase } from "./db/connection.js";
-export { createSqliteLogStore } from "./db/sqlite-log-store.js";
-export { createSqliteAgentRegistry } from "./db/sqlite-agent-registry.js";
-export { createSqliteAuditLogger } from "./db/sqlite-audit-logger.js";
-export { createSqliteBudgetManager } from "./db/sqlite-budget-manager.js";
+export { createLogStore } from "./db/log-store.js";
+export { createAgentRegistry } from "./db/agent-registry.js";
+export { createAuditLogger } from "./db/audit-logger.js";
+export { createBudgetManager } from "./db/budget-manager.js";
 export { queryCostAttribution } from "./db/cost-attribution.js";
 export type { CostAttributionRow } from "./db/cost-attribution.js";
 export { createSqliteApiKeyManager } from "./db/sqlite-api-key-manager.js";
 // Phase 8: PII & Guardrails
 export * from "./pii/detector.js";
 export {
-  createSqliteGuardrailStore,
+  createGuardrailStore,
   getPiiConfig,
 } from "./pii/guardrail-store.js";
 export type { GuardrailConfig, GuardrailStore } from "./pii/guardrail-store.js";

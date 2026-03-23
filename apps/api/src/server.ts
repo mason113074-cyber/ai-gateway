@@ -6,13 +6,14 @@ import {
   evaluatePolicy,
   mockApprovals,
   mockAuditEvents,
+  createDatabase,
   createDatabaseWithRaw,
-  createSqliteLogStore,
-  createSqliteAgentRegistry,
-  createSqliteAuditLogger,
-  createSqliteBudgetManager,
+  createLogStore,
+  createAgentRegistry,
+  createAuditLogger,
+  createBudgetManager,
   createSqliteApiKeyManager,
-  createSqliteGuardrailStore,
+  createGuardrailStore,
   getPiiConfig,
   createSlidingWindowRateLimiter,
   createSqliteRateLimitConfigStore,
@@ -25,12 +26,12 @@ import { registerProxyRoutes } from "./proxy.js";
 
 const dbPath = process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "gateway.db");
 const { db, raw } = createDatabaseWithRaw(dbPath);
-const logStore = createSqliteLogStore(db);
-const agentRegistry = createSqliteAgentRegistry(db);
-const auditLogger = createSqliteAuditLogger(db);
-const budgetManager = createSqliteBudgetManager(db, raw);
+const logStore = createLogStore(db);
+const agentRegistry = createAgentRegistry(db);
+const auditLogger = createAuditLogger(db);
+const budgetManager = createBudgetManager(db, raw);
 const apiKeyManager = createSqliteApiKeyManager(raw);
-const guardrailStore = createSqliteGuardrailStore(db);
+const guardrailStore = createGuardrailStore(db);
 const rateLimiter = createSlidingWindowRateLimiter(raw);
 const rateLimitConfigStore = createSqliteRateLimitConfigStore(raw);
 
@@ -50,8 +51,8 @@ const app = createApp({ logger: true });
 await app.register(cors, { origin: true });
 
 registerAuthMiddleware(app as Parameters<typeof registerAuthMiddleware>[0], apiKeyManager, {
-  auditLog: (workspaceId, event) =>
-    auditLogger.log(workspaceId, {
+  auditLog: async (workspaceId, event) =>
+    await auditLogger.log(workspaceId, {
       eventType: event.eventType,
       actorType: (event.actorType === "agent" || event.actorType === "user" ? event.actorType : "system") as "agent" | "user" | "system",
       actorId: event.actorId,
@@ -60,7 +61,7 @@ registerAuthMiddleware(app as Parameters<typeof registerAuthMiddleware>[0], apiK
     }),
 });
 registerProxyRoutes(app, agentRegistry, logStore, budgetManager, auditLogger, {
-  getPiiConfig: (workspaceId) => getPiiConfig(guardrailStore, workspaceId),
+  getPiiConfig: async (workspaceId) => await getPiiConfig(guardrailStore, workspaceId),
   getRateLimitConfig: (workspaceId, teamId, agentId) =>
     rateLimitConfigStore.getEffectiveConfig(workspaceId, teamId, agentId),
   rateLimiter,
@@ -80,14 +81,14 @@ app.get("/api/session", async (request: { workspaceId?: string; userId?: string;
 
 app.get("/api/agents", { preHandler: [requirePermission("read:logs")] }, async (request: { workspaceId?: string }) => {
   const workspaceId = request.workspaceId ?? "default";
-  return { items: agentRegistry.list(workspaceId) };
+  return { items: await agentRegistry.list(workspaceId) };
 });
 
 app.post("/api/agents", { preHandler: [requirePermission("write:agents")] }, async (request: { workspaceId?: string; body?: unknown }) => {
   const workspaceId = request.workspaceId ?? "default";
   const body = request.body;
   if (!body || typeof body !== "object") throw { statusCode: 400, message: "Body required" };
-  const agent = agentRegistry.create(workspaceId, body as Parameters<typeof agentRegistry.create>[1]);
+  const agent = await agentRegistry.create(workspaceId, body as any);
   return agent;
 });
 
@@ -96,7 +97,7 @@ app.patch("/api/agents/:id", { preHandler: [requirePermission("write:agents")] }
   const { id } = request.params ?? {};
   const body = (request.body ?? {}) as Record<string, unknown>;
   if (!id) throw { statusCode: 400, message: "id required" };
-  const agent = agentRegistry.update(workspaceId, id, body as Partial<Parameters<typeof agentRegistry.update>[2]>);
+  const agent = await agentRegistry.update(workspaceId, id, body as any);
   if (!agent) throw { statusCode: 404, message: "Agent not found" };
   return agent;
 });
@@ -115,7 +116,7 @@ app.get("/api/audit-logs", { preHandler: [requirePermission("read:audit")] }, as
 }) => {
   const workspaceId = request.workspaceId ?? "default";
   const q = request.query ?? {};
-  const result = auditLogger.query({
+  const result = await auditLogger.query({
     workspaceId,
     eventType: q.eventType,
     actorId: q.actorId,
@@ -129,7 +130,7 @@ app.get("/api/audit-logs", { preHandler: [requirePermission("read:audit")] }, as
 
 app.get("/api/guardrails", { preHandler: [requirePermission("read:audit")] }, async (request: { workspaceId?: string }) => {
   const workspaceId = request.workspaceId ?? "default";
-  return { items: guardrailStore.list(workspaceId) };
+  return { items: await guardrailStore.list(workspaceId) };
 });
 
 app.post("/api/guardrails", { preHandler: [requirePermission("write:policies")] }, async (request: {
@@ -139,7 +140,7 @@ app.post("/api/guardrails", { preHandler: [requirePermission("write:policies")] 
   const workspaceId = request.workspaceId ?? "default";
   const { type, config, enabled } = request.body ?? {};
   if (!type || !config) throw { statusCode: 400, message: "type and config required" };
-  const result = guardrailStore.upsert(workspaceId, type, config as Parameters<typeof guardrailStore.upsert>[2], enabled ?? true);
+  const result = await guardrailStore.upsert(workspaceId, type, config as any, enabled ?? true);
   return result;
 });
 
@@ -153,7 +154,7 @@ app.patch("/api/guardrails/:id", { preHandler: [requirePermission("write:policie
   const { enabled } = request.body ?? {};
   if (!id) throw { statusCode: 400, message: "id required" };
   if (enabled === undefined) throw { statusCode: 400, message: "enabled required" };
-  const result = guardrailStore.setEnabled(workspaceId, id, enabled);
+  const result = await guardrailStore.setEnabled(workspaceId, id, enabled);
   if (!result) throw { statusCode: 404, message: "Guardrail config not found" };
   return result;
 });
@@ -240,27 +241,27 @@ app.get("/api/logs", { preHandler: [requirePermission("read:logs")] }, async (re
 
 app.get("/api/stats", { preHandler: [requirePermission("read:costs")] }, async (request: { query?: { agentId?: string; teamId?: string } }) => {
   const { agentId, teamId } = request.query ?? {};
-  return logStore.getStats({ agentId, teamId });
+  return await logStore.getStats({ agentId, teamId });
 });
 
 app.get("/api/budgets/teams", { preHandler: [requirePermission("read:costs")] }, async (request: { workspaceId?: string }) => {
   const workspaceId = request.workspaceId ?? "default";
-  return { items: budgetManager.listTeamBudgets(workspaceId) };
+  return { items: await budgetManager.listTeamBudgets(workspaceId) };
 });
 
 app.post("/api/budgets/teams", { preHandler: [requirePermission("write:budgets")] }, async (request: { workspaceId?: string; body?: { teamId?: string; monthlyBudgetUsd?: number; hardCap?: boolean } }) => {
   const workspaceId = request.workspaceId ?? "default";
   const { teamId, monthlyBudgetUsd, hardCap } = request.body ?? {};
   if (!teamId || monthlyBudgetUsd == null) throw { statusCode: 400, message: "teamId and monthlyBudgetUsd required" };
-  budgetManager.setTeamBudget(workspaceId, teamId, Number(monthlyBudgetUsd), hardCap ?? true);
-  return budgetManager.getTeamBudget(workspaceId, teamId);
+  await budgetManager.setTeamBudget(workspaceId, teamId, Number(monthlyBudgetUsd), hardCap ?? true);
+  return await budgetManager.getTeamBudget(workspaceId, teamId);
 });
 
 app.get("/api/budgets/teams/:teamId", { preHandler: [requirePermission("read:costs")] }, async (request: { workspaceId?: string; params?: { teamId: string } }) => {
   const workspaceId = request.workspaceId ?? "default";
   const teamId = request.params?.teamId;
   if (!teamId) throw { statusCode: 400, message: "teamId required" };
-  const budget = budgetManager.getTeamBudget(workspaceId, teamId);
+  const budget = await budgetManager.getTeamBudget(workspaceId, teamId);
   if (!budget) throw { statusCode: 404, message: "Budget not found" };
   return budget;
 });
@@ -269,15 +270,15 @@ app.post("/api/budgets/agents", { preHandler: [requirePermission("write:budgets"
   const workspaceId = request.workspaceId ?? "default";
   const { agentId, dailyBudgetUsd, hardCap } = request.body ?? {};
   if (!agentId || dailyBudgetUsd == null) throw { statusCode: 400, message: "agentId and dailyBudgetUsd required" };
-  budgetManager.setAgentBudget(workspaceId, agentId, Number(dailyBudgetUsd), hardCap ?? true);
-  return budgetManager.getAgentBudget(workspaceId, agentId);
+  await budgetManager.setAgentBudget(workspaceId, agentId, Number(dailyBudgetUsd), hardCap ?? true);
+  return await budgetManager.getAgentBudget(workspaceId, agentId);
 });
 
 app.get("/api/budgets/agents/:agentId", { preHandler: [requirePermission("read:costs")] }, async (request: { workspaceId?: string; params?: { agentId: string } }) => {
   const workspaceId = request.workspaceId ?? "default";
   const agentId = request.params?.agentId;
   if (!agentId) throw { statusCode: 400, message: "agentId required" };
-  const budget = budgetManager.getAgentBudget(workspaceId, agentId);
+  const budget = await budgetManager.getAgentBudget(workspaceId, agentId);
   if (!budget) throw { statusCode: 404, message: "Budget not found" };
   return budget;
 });
@@ -285,8 +286,13 @@ app.get("/api/budgets/agents/:agentId", { preHandler: [requirePermission("read:c
 app.get("/api/costs", { preHandler: [requirePermission("read:costs")] }, async (request: { workspaceId?: string; query?: { groupBy?: string; startDate?: string; endDate?: string } }) => {
   const workspaceId = request.workspaceId ?? "default";
   const { groupBy, startDate, endDate } = request.query ?? {};
-  const validGroupBy = groupBy === "team" || groupBy === "agent" || groupBy === "model" || groupBy === "team,model" ? groupBy : "team";
-  return { items: queryCostAttribution(db, workspaceId, { groupBy: validGroupBy, startDate, endDate }) };
+  const result = await queryCostAttribution(db, workspaceId, {
+    groupBy: (groupBy as any) ?? "team",
+    startDate,
+    endDate,
+  });
+  return { items: result };
+});Attribution(db, workspaceId, { groupBy: validGroupBy, startDate, endDate }) };
 });
 
 app.post("/api/policy/evaluate", { preHandler: [requirePermission("write:policies")] }, async (request: { body: ActionRequest }) => {

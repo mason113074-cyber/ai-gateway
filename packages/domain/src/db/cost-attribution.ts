@@ -1,6 +1,8 @@
 import { eq, gte, lte, sql, and } from "drizzle-orm";
 import type { Database } from "./connection";
-import { proxyLogs } from "./schema";
+import schema from "./schema.js";
+
+const { proxyLogs } = schema;
 
 export interface CostAttributionRow {
   groupKey: string;
@@ -9,7 +11,7 @@ export interface CostAttributionRow {
   requestCount: number;
 }
 
-export function queryCostAttribution(
+export async function queryCostAttribution(
   db: Database,
   workspaceId: string,
   opts: {
@@ -17,87 +19,52 @@ export function queryCostAttribution(
     startDate?: string;
     endDate?: string;
   }
-): CostAttributionRow[] {
+): Promise<CostAttributionRow[]> {
+  const isPg = "execute" in db && !("run" in db);
   const conditions = [eq(proxyLogs.workspaceId, workspaceId)];
   if (opts.startDate)
-    conditions.push(gte(proxyLogs.timestamp, opts.startDate));
+    conditions.push(gte(proxyLogs.timestamp, opts.startDate as any));
   if (opts.endDate)
-    conditions.push(lte(proxyLogs.timestamp, opts.endDate));
+    conditions.push(lte(proxyLogs.timestamp, opts.endDate as any));
   const whereClause = and(...conditions);
 
+  let groupField: any;
   if (opts.groupBy === "team") {
-    const rows = db
-      .select({
-        groupKey: proxyLogs.teamId,
-        totalCostUsd: sql<number>`COALESCE(SUM(${proxyLogs.costUsd}), 0)`,
-        totalTokens: sql<number>`COALESCE(SUM(${proxyLogs.totalTokens}), 0)`,
-        requestCount: sql<number>`COUNT(*)`,
-      })
-      .from(proxyLogs)
-      .where(whereClause)
-      .groupBy(proxyLogs.teamId)
-      .all();
-    return rows.map((r) => ({
-      groupKey: r.groupKey,
-      totalCostUsd: Number(r.totalCostUsd),
-      totalTokens: Number(r.totalTokens),
-      requestCount: Number(r.requestCount),
-    }));
+    groupField = proxyLogs.teamId;
+  } else if (opts.groupBy === "agent") {
+    groupField = proxyLogs.agentId;
+  } else if (opts.groupBy === "model") {
+    groupField = proxyLogs.model;
+  } else {
+    // team,model
+    groupField = isPg 
+      ? sql<string>`${proxyLogs.teamId} || ':' || ${proxyLogs.model}`
+      : sql<string>`${proxyLogs.teamId} || ':' || ${proxyLogs.model}`;
   }
 
-  if (opts.groupBy === "agent") {
-    const rows = db
-      .select({
-        groupKey: proxyLogs.agentId,
-        totalCostUsd: sql<number>`COALESCE(SUM(${proxyLogs.costUsd}), 0)`,
-        totalTokens: sql<number>`COALESCE(SUM(${proxyLogs.totalTokens}), 0)`,
-        requestCount: sql<number>`COUNT(*)`,
-      })
-      .from(proxyLogs)
-      .where(whereClause)
-      .groupBy(proxyLogs.agentId)
-      .all();
-    return rows.map((r) => ({
-      groupKey: r.groupKey,
-      totalCostUsd: Number(r.totalCostUsd),
-      totalTokens: Number(r.totalTokens),
-      requestCount: Number(r.requestCount),
-    }));
-  }
-
-  if (opts.groupBy === "model") {
-    const rows = db
-      .select({
-        groupKey: proxyLogs.model,
-        totalCostUsd: sql<number>`COALESCE(SUM(${proxyLogs.costUsd}), 0)`,
-        totalTokens: sql<number>`COALESCE(SUM(${proxyLogs.totalTokens}), 0)`,
-        requestCount: sql<number>`COUNT(*)`,
-      })
-      .from(proxyLogs)
-      .where(whereClause)
-      .groupBy(proxyLogs.model)
-      .all();
-    return rows.map((r) => ({
-      groupKey: r.groupKey,
-      totalCostUsd: Number(r.totalCostUsd),
-      totalTokens: Number(r.totalTokens),
-      requestCount: Number(r.requestCount),
-    }));
-  }
-
-  // team,model
-  const rows = db
+  const query = db
     .select({
-      groupKey: sql<string>`${proxyLogs.teamId} || ':' || ${proxyLogs.model}`,
+      groupKey: groupField,
       totalCostUsd: sql<number>`COALESCE(SUM(${proxyLogs.costUsd}), 0)`,
       totalTokens: sql<number>`COALESCE(SUM(${proxyLogs.totalTokens}), 0)`,
       requestCount: sql<number>`COUNT(*)`,
     })
     .from(proxyLogs)
-    .where(whereClause)
-    .groupBy(proxyLogs.teamId, proxyLogs.model)
-    .all();
-  return rows.map((r) => ({
+    .where(whereClause);
+
+  if (opts.groupBy === "team") {
+    query.groupBy(proxyLogs.teamId);
+  } else if (opts.groupBy === "agent") {
+    query.groupBy(proxyLogs.agentId);
+  } else if (opts.groupBy === "model") {
+    query.groupBy(proxyLogs.model);
+  } else {
+    query.groupBy(proxyLogs.teamId, proxyLogs.model);
+  }
+
+  const rows = isPg ? await (query as any).execute() : (query as any).all();
+  
+  return rows.map((r: any) => ({
     groupKey: String(r.groupKey),
     totalCostUsd: Number(r.totalCostUsd),
     totalTokens: Number(r.totalTokens),

@@ -1,18 +1,24 @@
 import type { AgentRecord } from "./types";
 
 export interface AgentRegistry {
-  list(workspaceId: string): AgentRecord[];
-  getById(workspaceId: string, id: string): AgentRecord | undefined;
+  list(workspaceId: string): AgentRecord[] | Promise<AgentRecord[]>;
+  getById(
+    workspaceId: string,
+    id: string
+  ): AgentRecord | undefined | Promise<AgentRecord | undefined>;
   create(
     workspaceId: string,
     agent: Omit<AgentRecord, "id">
-  ): AgentRecord;
+  ): AgentRecord | Promise<AgentRecord>;
   update(
     workspaceId: string,
     id: string,
     patch: Partial<Omit<AgentRecord, "id">>
-  ): AgentRecord | undefined;
-  ensureExists(workspaceId: string, agentId: string): AgentRecord;
+  ): AgentRecord | undefined | Promise<AgentRecord | undefined>;
+  ensureExists(
+    workspaceId: string,
+    agentId: string
+  ): AgentRecord | Promise<AgentRecord>;
 }
 
 export class InMemoryAgentRegistry implements AgentRegistry {

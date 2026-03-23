@@ -15,6 +15,7 @@ git clone https://github.com/mason113074-cyber/ai-gateway.git
 cd ai-gateway
 cp .env.example .env
 # Edit .env and set OPENAI_API_KEY and ANTHROPIC_API_KEY
+# (Optional) Set DATABASE_URL=postgres://user:pass@host:port/db for PostgreSQL
 docker compose up -d
 ```
 
@@ -63,7 +64,8 @@ Every request is now logged, cost-tracked, and evaluated against policies and ra
 | **Agent registry** | Auto-register agents, CRUD API |
 | **Policy engine** | Allow / deny / requires_approval |
 | **Cost dashboard** | Per-agent, per-team, per-model cost and tokens |
-| **Persistent storage** | SQLite (WAL), proxy logs, agents, audit logs |
+| **Persistent storage** | SQLite (WAL) or PostgreSQL, proxy logs, agents, audit logs |
+| **Smart Routing** | Automatic fallback between providers (OpenAI ↔ Anthropic) |
 | **Budgets** | Per-team monthly and per-agent daily caps (hard/soft) |
 | **RBAC + API keys** | SHA-256 hashed keys, permissions, model allowlists |
 | **PII guardrails** | Regex-based redact/warn/block (email, SSN, cards, etc.) |
