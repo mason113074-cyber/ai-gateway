@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const API_BASE = "/api/gateway";
 
 type Stats = {
   totalRequests: number;
@@ -16,7 +16,6 @@ async function getStats(): Promise<Stats | null> {
   try {
     const res = await fetch(`${API_BASE}/api/stats`, {
       cache: "no-store",
-      headers: { "x-workspace-id": "default" },
     });
     if (!res.ok) return null;
     return res.json();

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const API_BASE = typeof window !== "undefined" ? "" : process.env.NEXT_PUBLIC_API_URL ?? "";
+const API_BASE = "/api/gateway";
 
 type TeamBudget = {
   id: string;
@@ -70,10 +70,10 @@ export default function CostsPage() {
   const [setBudgetHardCap, setSetBudgetHardCap] = useState(true);
 
   useEffect(() => {
-    const headers = { "x-workspace-id": "default" };
+    const headers = {};
     Promise.all([
-      fetch(`${API_BASE}/api/budgets/teams`, { headers }).then((r) => r.json()),
-      fetch(`${API_BASE}/api/costs?groupBy=team`, { headers }).then((r) => r.json()),
+      fetch(`${API_BASE}/api/gateway/budgets/teams`, { headers }).then((r) => r.json()),
+      fetch(`${API_BASE}/api/gateway/costs?groupBy=team`, { headers }).then((r) => r.json()),
     ])
       .then(([teamsRes, costsRes]) => {
         setTeamBudgets(teamsRes.items ?? []);
@@ -91,30 +91,26 @@ export default function CostsPage() {
     if (!setBudgetId || Number.isNaN(amount) || amount <= 0) return;
     const url =
       setBudgetType === "team"
-        ? `${API_BASE}/api/budgets/teams`
-        : `${API_BASE}/api/budgets/agents`;
+        ? `${API_BASE}/api/gateway/budgets/teams`
+        : `${API_BASE}/api/gateway/budgets/agents`;
     const body =
       setBudgetType === "team"
         ? { teamId: setBudgetId, monthlyBudgetUsd: amount, hardCap: setBudgetHardCap }
         : { agentId: setBudgetId, dailyBudgetUsd: amount, hardCap: setBudgetHardCap };
     await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-workspace-id": "default" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     setSetBudgetId("");
     setSetBudgetAmount("");
     const [teamsRes, costsRes] = await Promise.all([
-      fetch(`${API_BASE}/api/budgets/teams`, { headers: { "x-workspace-id": "default" } }).then((r) => r.json()),
-      fetch(`${API_BASE}/api/costs?groupBy=team`, { headers: { "x-workspace-id": "default" } }).then((r) => r.json()),
+      fetch(`${API_BASE}/api/gateway/budgets/teams`).then((r) => r.json()),
+      fetch(`${API_BASE}/api/gateway/costs?groupBy=team`).then((r) => r.json()),
     ]);
     setTeamBudgets(teamsRes.items ?? []);
     setCostsByTeam(costsRes.items ?? []);
   };
-
-  const costByTeamId = Object.fromEntries(
-    costsByTeam.map((c) => [c.groupKey, c.totalCostUsd])
-  );
 
   return (
     <div className="p-6 space-y-8">

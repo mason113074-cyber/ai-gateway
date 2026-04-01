@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const API_BASE = "/api/gateway";
 
 async function getOverviewStats(): Promise<{
   agentCount: number;
@@ -9,14 +9,8 @@ async function getOverviewStats(): Promise<{
 }> {
   try {
     const [agentsRes, statsRes] = await Promise.all([
-      fetch(`${API_BASE}/api/agents`, {
-        cache: "no-store",
-        headers: { "x-workspace-id": "default" },
-      }),
-      fetch(`${API_BASE}/api/stats`, {
-        cache: "no-store",
-        headers: { "x-workspace-id": "default" },
-      }),
+      fetch(`${API_BASE}/agents`, { cache: "no-store" }),
+      fetch(`${API_BASE}/stats`, { cache: "no-store" }),
     ]);
     const agents = agentsRes.ok ? ((await agentsRes.json()) as { items: unknown[] }).items?.length ?? 0 : 0;
     const stats = statsRes.ok ? (await statsRes.json()) as { totalRequests: number; totalCostUsd: number } : { totalRequests: 0, totalCostUsd: 0 };

@@ -1,7 +1,5 @@
 import Link from "next/link";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
-
 type LogEntry = {
   id: string;
   timestamp: string;
@@ -17,10 +15,7 @@ type LogEntry = {
 
 async function getLogs(limit = 100): Promise<LogEntry[]> {
   try {
-    const res = await fetch(
-      `${API_BASE}/api/logs?limit=${limit}`,
-      { cache: "no-store", headers: { "x-workspace-id": "default" } }
-    );
+    const res = await fetch(`/api/gateway/logs?limit=${limit}`, { cache: "no-store" });
     if (!res.ok) return [];
     const data = (await res.json()) as { items: LogEntry[] };
     return data.items ?? [];

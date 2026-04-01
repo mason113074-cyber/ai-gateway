@@ -24,8 +24,7 @@ export function createBudgetManager(
   db: Database,
   raw: RawDatabase
 ): BudgetManager {
-  const isPg = "execute" in db && !("run" in db);
-  const now = () => isPg ? new Date() : new Date().toISOString();
+  const now = () => new Date().toISOString();
 
   async function ensureTeamPeriod(workspaceId: string, teamId: string): Promise<void> {
     const query = db
@@ -37,7 +36,7 @@ export function createBudgetManager(
           eq(teamBudgets.teamId, teamId)
         )
       );
-    const row = isPg ? (await (query as any).execute())[0] : (query as any).get();
+    const row = (query as any).get();
     if (!row) return;
     
     const today = todayISO();
@@ -48,8 +47,8 @@ export function createBudgetManager(
       const updateQuery = db.update(teamBudgets)
         .set({
           currentSpendUsd: 0,
-          periodStart: isPg ? monthStart(d) as any : monthStart(d),
-          periodEnd: isPg ? monthEnd(d) as any : monthEnd(d),
+          periodStart: monthStart(d),
+          periodEnd: monthEnd(d),
           status: "active",
           updatedAt: now(),
         })
@@ -59,7 +58,7 @@ export function createBudgetManager(
             eq(teamBudgets.teamId, teamId)
           )
         );
-      if (isPg) await (updateQuery as any).execute(); else (updateQuery as any).run();
+      (updateQuery as any).run();
     }
   }
 
@@ -73,7 +72,7 @@ export function createBudgetManager(
           eq(agentBudgets.agentId, agentId)
         )
       );
-    const row = isPg ? (await (query as any).execute())[0] : (query as any).get();
+    const row = (query as any).get();
     if (!row) return;
     
     const today = todayISO();
@@ -83,7 +82,7 @@ export function createBudgetManager(
       const updateQuery = db.update(agentBudgets)
         .set({
           currentSpendUsd: 0,
-          periodStart: isPg ? today as any : today,
+          periodStart: today,
           status: "active",
           updatedAt: now(),
         })
@@ -93,7 +92,7 @@ export function createBudgetManager(
             eq(agentBudgets.agentId, agentId)
           )
         );
-      if (isPg) await (updateQuery as any).execute(); else (updateQuery as any).run();
+      (updateQuery as any).run();
     }
   }
 
@@ -135,7 +134,7 @@ export function createBudgetManager(
       await ensureTeamPeriod(workspaceId, teamId);
       await ensureAgentPeriod(workspaceId, agentId);
 
-      if (!isPg) (raw as any).exec("BEGIN IMMEDIATE");
+      (raw as any).exec("BEGIN IMMEDIATE");
       try {
         const teamQuery = db
           .select()
@@ -156,8 +155,8 @@ export function createBudgetManager(
             )
           );
 
-        const teamRow = isPg ? (await (teamQuery as any).execute())[0] : (teamQuery as any).get();
-        const agentRow = isPg ? (await (agentQuery as any).execute())[0] : (agentQuery as any).get();
+        const teamRow = (teamQuery as any).get();
+        const agentRow = (agentQuery as any).get();
 
         let teamRemaining: number | null = null;
         let agentRemaining: number | null = null;
@@ -194,7 +193,7 @@ export function createBudgetManager(
           }
         }
 
-        if (!isPg) (raw as any).exec("COMMIT");
+        (raw as any).exec("COMMIT");
         return {
           allowed,
           teamBudgetRemaining: teamRemaining,
@@ -202,7 +201,7 @@ export function createBudgetManager(
           reason,
         };
       } catch (e) {
-        if (!isPg) (raw as any).exec("ROLLBACK");
+        (raw as any).exec("ROLLBACK");
         throw e;
       }
     },
@@ -213,7 +212,7 @@ export function createBudgetManager(
       agentId: string,
       costUsd: number
     ): Promise<void> {
-      if (!isPg) (raw as any).exec("BEGIN IMMEDIATE");
+      (raw as any).exec("BEGIN IMMEDIATE");
       try {
         const teamQuery = db
           .select()
@@ -224,7 +223,7 @@ export function createBudgetManager(
               eq(teamBudgets.teamId, teamId)
             )
           );
-        const teamRow = isPg ? (await (teamQuery as any).execute())[0] : (teamQuery as any).get();
+        const teamRow = (teamQuery as any).get();
         
         if (teamRow) {
           const newSpend = teamRow.currentSpendUsd + costUsd;
@@ -241,7 +240,7 @@ export function createBudgetManager(
                 eq(teamBudgets.teamId, teamId)
               )
             );
-          if (isPg) await (updateQuery as any).execute(); else (updateQuery as any).run();
+          (updateQuery as any).run();
         }
 
         const agentQuery = db
@@ -253,7 +252,7 @@ export function createBudgetManager(
               eq(agentBudgets.agentId, agentId)
             )
           );
-        const agentRow = isPg ? (await (agentQuery as any).execute())[0] : (agentQuery as any).get();
+        const agentRow = (agentQuery as any).get();
         
         if (agentRow) {
           const newSpend = agentRow.currentSpendUsd + costUsd;
@@ -270,11 +269,11 @@ export function createBudgetManager(
                 eq(agentBudgets.agentId, agentId)
               )
             );
-          if (isPg) await (updateQuery as any).execute(); else (updateQuery as any).run();
+          (updateQuery as any).run();
         }
-        if (!isPg) (raw as any).exec("COMMIT");
+        (raw as any).exec("COMMIT");
       } catch (e) {
-        if (!isPg) (raw as any).exec("ROLLBACK");
+        (raw as any).exec("ROLLBACK");
         throw e;
       }
     },
@@ -300,7 +299,7 @@ export function createBudgetManager(
             eq(teamBudgets.teamId, teamId)
           )
         );
-      const existing = isPg ? (await (query as any).execute())[0] : (query as any).get();
+      const existing = (query as any).get();
       
       if (existing) {
         const updateQuery = db.update(teamBudgets)
@@ -315,24 +314,23 @@ export function createBudgetManager(
               eq(teamBudgets.teamId, teamId)
             )
           );
-        if (isPg) await (updateQuery as any).execute(); else (updateQuery as any).run();
+        (updateQuery as any).run();
       } else {
-        const insertQuery = db.insert(teamBudgets)
-          .values({
+        const values = {
             id,
             workspaceId,
             teamId,
             monthlyBudgetUsd,
             currentSpendUsd: 0,
-            periodStart: isPg ? periodStart as any : periodStart,
-            periodEnd: isPg ? periodEnd as any : periodEnd,
+            periodStart,
+            periodEnd,
             hardCap: hardCap ? 1 : 0,
             alertThresholdPct: 80,
             status: "active",
             createdAt,
             updatedAt: createdAt,
-          });
-        if (isPg) await (insertQuery as any).execute(); else (insertQuery as any).run();
+          };
+        (db.insert(teamBudgets) as any).values(values).run();
       }
     },
 
@@ -355,7 +353,7 @@ export function createBudgetManager(
             eq(agentBudgets.agentId, agentId)
           )
         );
-      const existing = isPg ? (await (query as any).execute())[0] : (query as any).get();
+      const existing = (query as any).get();
       
       if (existing) {
         const updateQuery = db.update(agentBudgets)
@@ -370,22 +368,21 @@ export function createBudgetManager(
               eq(agentBudgets.agentId, agentId)
             )
           );
-        if (isPg) await (updateQuery as any).execute(); else (updateQuery as any).run();
+        (updateQuery as any).run();
       } else {
-        const insertQuery = db.insert(agentBudgets)
-          .values({
+        const values = {
             id,
             workspaceId,
             agentId,
             dailyBudgetUsd,
             currentSpendUsd: 0,
-            periodStart: isPg ? today as any : today,
+            periodStart: today,
             hardCap: hardCap ? 1 : 0,
             status: "active",
             createdAt,
             updatedAt: createdAt,
-          });
-        if (isPg) await (insertQuery as any).execute(); else (insertQuery as any).run();
+          };
+        (db.insert(agentBudgets) as any).values(values).run();
       }
     },
 
@@ -400,7 +397,7 @@ export function createBudgetManager(
             eq(teamBudgets.teamId, teamId)
           )
         );
-      const row = isPg ? (await (query as any).execute())[0] : (query as any).get();
+      const row = (query as any).get();
       return row ? rowToTeamBudget(row) : null;
     },
 
@@ -415,7 +412,7 @@ export function createBudgetManager(
             eq(agentBudgets.agentId, agentId)
           )
         );
-      const row = isPg ? (await (query as any).execute())[0] : (query as any).get();
+      const row = (query as any).get();
       return row ? rowToAgentBudget(row) : null;
     },
 
@@ -424,7 +421,7 @@ export function createBudgetManager(
         .select()
         .from(teamBudgets)
         .where(eq(teamBudgets.workspaceId, workspaceId));
-      const rows = isPg ? await (query as any).execute() : (query as any).all();
+      const rows = (query as any).all();
       for (const r of rows) await ensureTeamPeriod(workspaceId, r.teamId);
       return rows.map(rowToTeamBudget);
     },
@@ -435,18 +432,18 @@ export function createBudgetManager(
         .select()
         .from(agentBudgets)
         .where(eq(agentBudgets.workspaceId, workspaceId));
-      const rows = isPg ? await (query as any).execute() : (query as any).all();
+      const rows = (query as any).all();
       
       for (const r of rows) {
         const updateQuery = db.update(agentBudgets)
           .set({
             currentSpendUsd: 0,
-            periodStart: isPg ? today as any : today,
+            periodStart: today,
             status: "active",
             updatedAt: now(),
           })
           .where(eq(agentBudgets.id, r.id));
-        if (isPg) await (updateQuery as any).execute(); else (updateQuery as any).run();
+        (updateQuery as any).run();
       }
     },
 
@@ -458,19 +455,19 @@ export function createBudgetManager(
         .select()
         .from(teamBudgets)
         .where(eq(teamBudgets.workspaceId, workspaceId));
-      const rows = isPg ? await (query as any).execute() : (query as any).all();
+      const rows = (query as any).all();
       
       for (const r of rows) {
         const updateQuery = db.update(teamBudgets)
           .set({
             currentSpendUsd: 0,
-            periodStart: isPg ? periodStart as any : periodStart,
-            periodEnd: isPg ? periodEnd as any : periodEnd,
+            periodStart,
+            periodEnd,
             status: "active",
             updatedAt: now(),
           })
           .where(eq(teamBudgets.id, r.id));
-        if (isPg) await (updateQuery as any).execute(); else (updateQuery as any).run();
+        (updateQuery as any).run();
       }
     },
   };

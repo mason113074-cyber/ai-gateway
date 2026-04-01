@@ -1,7 +1,7 @@
 # Current status
 
 - **Branch health**: Only `main` branch exists. Protected. All feature branches merged and deleted.
-- **Architecture snapshot**: Monorepo with apps/web (Next.js), apps/api (Fastify), packages/domain (types, policy, db schema, SQLite & PostgreSQL stores, audit, PII detector, guardrail store, rate limiter, rate limit config store, smart routing). See docs/architecture.md.
+- **Architecture snapshot**: Monorepo with apps/web (Next.js), apps/api (Fastify), packages/domain (types, policy, SQLite-backed db schema/stores, audit, PII detector, guardrail store, rate limiter, rate limit config store). See docs/architecture.md.
 - **Done**: Phases 1–11 on main. Docker Compose + OSS launch readiness complete.
   - Phase 1–4: Core proxy, policy engine, agent registry, admin dashboard
   - Phase 5: Persistent storage (SQLite WAL), immutable audit logs
@@ -10,9 +10,15 @@
   - Phase 8: PII detection & redaction guardrails (regex-based, zero deps)
   - Phase 9: Per-team/per-agent sliding-window rate limiting
   - Phase 10: Dockerfiles, docker-compose.yml, README, CONTRIBUTING, LICENSE, CI
-  - Phase 11: PostgreSQL support, Smart Routing (Fallback), Advanced PII patterns
+  - Phase 11: Advanced PII patterns, rate limiting, and storage hardening shipped; PostgreSQL and cross-provider fallback are intentionally disabled for safety in v0.1.0
 - **Database**: 10 tables (proxy_logs, agents, audit_logs, team_budgets, agent_budgets, users, api_keys, guardrail_configs, rate_limit_windows, rate_limit_configs)
 - **API routes**: 22+ endpoints (proxy /v1/*, agents, logs, audit, budgets, costs, keys, guardrails, rate-limits, stats, health, session, policy)
-- **In progress**: None. Ready for v0.1.0 release.
-- **Blockers**: None. SQLite tests run only when better-sqlite3 native bindings are available.
-- **Next 3 priorities**: (1) Create GitHub Release v0.1.0. (2) GTM launch (HN, Reddit, LinkedIn). (3) Web UI for rate limit config.
+- **In progress**: Production hardening and correctness repair completed:
+  - `server.ts` corruption removed and endpoint permission mapping aligned to clearer RBAC names
+  - Auth default hardened: no unauthenticated management access, dev-only legacy header mode, bootstrap admin bearer token support
+  - Proxy header safety: gateway credentials are never forwarded upstream
+  - Fallback behavior: cross-provider fallback removed by default; retries stay within the same provider only
+  - Database truthfulness: runtime fails closed when `DATABASE_URL` is set (PostgreSQL unsupported in this release)
+  - Web console now calls same-origin `/api/gateway/*` server proxy with bearer auth instead of hardcoded `x-workspace-id`
+- **Blockers**: None.
+- **Next 3 priorities**: (1) Add explicit request/response adapter layer before re-enabling cross-provider fallback. (2) Implement full PostgreSQL runtime support with parity tests. (3) Add web automated tests for admin console flows.

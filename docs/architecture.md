@@ -30,7 +30,10 @@ Fastify 5 with:
 - /api/agents — Agent registry CRUD
 - /api/logs — Request log query
 - /api/stats — Cost and usage stats
-- Auth middleware (x-workspace-id / x-user-id headers)
+- Auth middleware:
+  - Gateway API key auth (`Authorization: Bearer gw-...` or `x-api-key`)
+  - Bootstrap admin bearer token (`BOOTSTRAP_ADMIN_TOKEN`) for self-hosted admin access
+  - Legacy header auth (`x-workspace-id`/`x-user-id`) disabled by default and only available when `ALLOW_LEGACY_HEADER_AUTH=true` and `NODE_ENV !== "production"`
 
 ### Domain (packages/domain)
 Shared logic and types:
@@ -45,12 +48,14 @@ Shared logic and types:
 - WAL mode for concurrent reads
 - BEGIN IMMEDIATE for atomic budget enforcement
 - Tables: agents, proxy_logs, budgets, policy_rules, audit_events
+- Runtime currently fails closed when `DATABASE_URL` is set; production runtime supports SQLite only.
 
 ## Key decisions
 - SQLite over PostgreSQL: simpler deployment for solo founder, sufficient for <10K agents
 - Agent identity via x-agent-id header: differentiator vs competitors (request-level only)
 - MIT proxy + closed-source governance: validated by Helicone/Langfuse/LiteLLM patterns
 - Streaming SSE passthrough: no buffering, preserves OpenAI/Anthropic response format
+- Cross-provider fallback is disabled by default because OpenAI and Anthropic payload/response formats are not interchangeable without explicit adapters.
 
 ## Completed phases (on main)
 - Phase 1: LLM Proxy Layer

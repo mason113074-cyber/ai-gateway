@@ -48,9 +48,13 @@ describe.runIf(canLoadSqlite)("SlidingWindowRateLimiter", () => {
 
   it("cleanup removes old windows", () => {
     const oldMinute = Math.floor(Date.now() / 60000) - 10;
-    raw.prepare("INSERT INTO rate_limit_windows VALUES (?, ?, ?, ?)").run("old:key", oldMinute, 100, 0);
+    raw
+      .prepare("INSERT INTO rate_limit_windows VALUES (?, ?, ?, ?)")
+      .run("old:key", oldMinute, 100, 0);
     limiter.cleanup();
-    const row = raw.prepare("SELECT count(*) as c FROM rate_limit_windows WHERE key = ?").get("old:key") as { c: number };
+    const row = raw
+      .prepare("SELECT count(*) as c FROM rate_limit_windows WHERE key = ?")
+      .get("old:key") as { c: number };
     expect(row.c).toBe(0);
   });
 });

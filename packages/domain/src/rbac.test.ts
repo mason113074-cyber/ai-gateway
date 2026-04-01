@@ -29,6 +29,13 @@ describe("RBAC", () => {
     expect(hasPermission("viewer", ["proxy"], "proxy")).toBe(true);
   });
 
+  it("supports legacy permission aliases for compatibility", () => {
+    expect(hasPermission("viewer", ["read:logs"], "read:agents")).toBe(true);
+    expect(hasPermission("viewer", ["read:costs"], "read:rate-limits")).toBe(true);
+    expect(hasPermission("viewer", ["write:budgets"], "write:rate-limits")).toBe(true);
+    expect(hasPermission("viewer", ["manage:keys"], "read:keys")).toBe(true);
+  });
+
   it("unknown role should have no permissions", () => {
     expect(hasPermission("unknown", [], "read:logs")).toBe(false);
   });

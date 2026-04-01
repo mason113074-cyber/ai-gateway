@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const API_BASE = typeof window !== "undefined" ? "" : process.env.NEXT_PUBLIC_API_URL ?? "";
+const API_BASE = "/api/gateway";
 
 type AuditItem = {
   id: string;
@@ -38,9 +38,7 @@ export default function AuditPage() {
     params.set("limit", String(limit));
     params.set("offset", String(offset));
     setLoading(true);
-    fetch(`${API_BASE}/api/audit-logs?${params.toString()}`, {
-      headers: { "x-workspace-id": "default" },
-    })
+    fetch(`${API_BASE}/api/gateway/audit-logs?${params.toString()}`)
       .then((res) => res.json())
       .then((data: { items?: AuditItem[]; total?: number }) => {
         setItems(data.items ?? []);

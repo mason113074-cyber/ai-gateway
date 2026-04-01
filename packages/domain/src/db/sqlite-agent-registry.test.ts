@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createDatabase } from "./connection";
-import { createSqliteAgentRegistry } from "./sqlite-agent-registry";
+import { createAgentRegistry } from "./agent-registry";
 
 const canLoadSqlite = (() => {
   try {
@@ -12,10 +12,10 @@ const canLoadSqlite = (() => {
 })();
 
 describe.runIf(canLoadSqlite)("SqliteAgentRegistry", () => {
-  it("create and list agents", () => {
+  it("create and list agents", async () => {
     const db = createDatabase(":memory:");
-    const registry = createSqliteAgentRegistry(db);
-    const created = registry.create("ws1", {
+    const registry = createAgentRegistry(db);
+    const created = await registry.create("ws1", {
       name: "Test Agent",
       owner: "alice",
       sponsor: "bob",
@@ -26,15 +26,15 @@ describe.runIf(canLoadSqlite)("SqliteAgentRegistry", () => {
     });
     expect(created.id).toBeDefined();
     expect(created.name).toBe("Test Agent");
-    const list = registry.list("ws1");
+    const list = await registry.list("ws1");
     expect(list).toHaveLength(1);
     expect(list[0].name).toBe("Test Agent");
   });
 
-  it("getById and update", () => {
+  it("getById and update", async () => {
     const db = createDatabase(":memory:");
-    const registry = createSqliteAgentRegistry(db);
-    const created = registry.create("ws1", {
+    const registry = createAgentRegistry(db);
+    const created = await registry.create("ws1", {
       name: "Original",
       owner: "alice",
       sponsor: "bob",
@@ -43,28 +43,31 @@ describe.runIf(canLoadSqlite)("SqliteAgentRegistry", () => {
       allowedDataScopes: [],
       description: "",
     });
-    const found = registry.getById("ws1", created.id);
+    const found = await registry.getById("ws1", created.id);
     expect(found?.name).toBe("Original");
-    const updated = registry.update("ws1", created.id, { name: "Updated" });
+    const updated = await registry.update("ws1", created.id, { name: "Updated" });
     expect(updated?.name).toBe("Updated");
-    expect(registry.getById("ws1", created.id)?.name).toBe("Updated");
+    const finalRecord = await registry.getById("ws1", created.id);
+    expect(finalRecord?.name).toBe("Updated");
   });
 
-  it("ensureExists creates new agent", () => {
+  it("ensureExists creates new agent", async () => {
     const db = createDatabase(":memory:");
-    const registry = createSqliteAgentRegistry(db);
-    const record = registry.ensureExists("ws1", "new-agent-id");
+    const registry = createAgentRegistry(db);
+    const record = await registry.ensureExists("ws1", "new-agent-id");
     expect(record.id).toBe("new-agent-id");
     expect(record.name).toContain("Auto-registered");
-    expect(registry.list("ws1")).toHaveLength(1);
+    const list = await registry.list("ws1");
+    expect(list).toHaveLength(1);
   });
 
-  it("ensureExists updates lastSeenAt for existing agent", () => {
+  it("ensureExists updates lastSeenAt for existing agent", async () => {
     const db = createDatabase(":memory:");
-    const registry = createSqliteAgentRegistry(db);
-    registry.ensureExists("ws1", "agent-1");
-    const second = registry.ensureExists("ws1", "agent-1");
+    const registry = createAgentRegistry(db);
+    await registry.ensureExists("ws1", "agent-1");
+    const second = await registry.ensureExists("ws1", "agent-1");
     expect(second.id).toBe("agent-1");
-    expect(registry.list("ws1")).toHaveLength(1);
+    const list = await registry.list("ws1");
+    expect(list).toHaveLength(1);
   });
 });

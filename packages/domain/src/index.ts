@@ -13,6 +13,7 @@ export * from "./api-key-manager";
 export * from "./fallback";
 export { createDatabase, createDatabaseWithRaw } from "./db/connection.js";
 export type { Database, RawDatabase } from "./db/connection.js";
+export { POSTGRES_UNSUPPORTED_MESSAGE } from "./db/connection.js";
 export { createLogStore } from "./db/log-store.js";
 export { createAgentRegistry } from "./db/agent-registry.js";
 export { createAuditLogger } from "./db/audit-logger.js";

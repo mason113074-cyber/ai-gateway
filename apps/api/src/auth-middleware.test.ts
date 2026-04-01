@@ -43,7 +43,30 @@ function mockKeyRecord(partial: {
 const createFastify = Fastify as unknown as (opts?: object) => any;
 
 describe("auth middleware and session", () => {
-  it("attaches workspaceId and userId from headers when no API key (legacy)", async () => {
+  it("rejects unauthenticated request by default", async () => {
+    delete process.env.ALLOW_LEGACY_HEADER_AUTH;
+    delete process.env.BOOTSTRAP_ADMIN_TOKEN;
+    const app = createFastify();
+    registerAuthMiddleware(app, createMockApiKeyManager());
+    app.get("/session", async (request: FastifyRequest) => ({
+      workspaceId: request.workspaceId ?? null,
+      userId: request.userId ?? null,
+      permissions: (request as any).permissions ?? null,
+    }));
+
+    const res = await app.inject({ method: "GET", url: "/session" });
+
+    expect(res.statusCode).toBe(401);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe("Authentication required");
+    await app.close();
+  });
+
+  it("allows legacy header auth only in explicit dev mode", async () => {
+    const prevNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+    process.env.ALLOW_LEGACY_HEADER_AUTH = "true";
+    delete process.env.BOOTSTRAP_ADMIN_TOKEN;
     const app = createFastify();
     registerAuthMiddleware(app, createMockApiKeyManager());
     app.get("/session", async (request: FastifyRequest) => ({
@@ -55,10 +78,7 @@ describe("auth middleware and session", () => {
     const res = await app.inject({
       method: "GET",
       url: "/session",
-      headers: {
-        "x-workspace-id": "ws-1",
-        "x-user-id": "user-1",
-      },
+      headers: { "x-workspace-id": "ws-1", "x-user-id": "user-1" },
     });
 
     expect(res.statusCode).toBe(200);
@@ -66,25 +86,60 @@ describe("auth middleware and session", () => {
     expect(body.workspaceId).toBe("ws-1");
     expect(body.userId).toBe("user-1");
     expect(body.permissions).toEqual(["admin"]);
+    await app.close();
+    process.env.NODE_ENV = prevNodeEnv;
+    delete process.env.ALLOW_LEGACY_HEADER_AUTH;
   });
 
-  it("returns null when headers are missing (legacy)", async () => {
+  it("ignores ALLOW_LEGACY_HEADER_AUTH in production", async () => {
+    const prevNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    process.env.ALLOW_LEGACY_HEADER_AUTH = "true";
+    delete process.env.BOOTSTRAP_ADMIN_TOKEN;
     const app = createFastify();
     registerAuthMiddleware(app, createMockApiKeyManager());
     app.get("/session", async (request: FastifyRequest) => ({
       workspaceId: request.workspaceId ?? null,
-      userId: request.userId ?? null,
     }));
 
     const res = await app.inject({
       method: "GET",
       url: "/session",
+      headers: { "x-workspace-id": "ws-1" },
+    });
+
+    expect(res.statusCode).toBe(401);
+    await app.close();
+    process.env.NODE_ENV = prevNodeEnv;
+    delete process.env.ALLOW_LEGACY_HEADER_AUTH;
+  });
+
+  it("allows bootstrap admin bearer token", async () => {
+    process.env.BOOTSTRAP_ADMIN_TOKEN = "bootstrap-secret";
+    process.env.BOOTSTRAP_ADMIN_WORKSPACE_ID = "ops";
+    delete process.env.ALLOW_LEGACY_HEADER_AUTH;
+    const app = createFastify();
+    registerAuthMiddleware(app, createMockApiKeyManager());
+    app.get("/session", async (request: FastifyRequest) => ({
+      workspaceId: request.workspaceId ?? null,
+      userId: request.userId ?? null,
+      permissions: (request as any).permissions ?? null,
+    }));
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/session",
+      headers: { authorization: "Bearer bootstrap-secret" },
     });
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.workspaceId).toBe(null);
-    expect(body.userId).toBe(null);
+    expect(body.workspaceId).toBe("ops");
+    expect(body.userId).toBe("bootstrap-admin");
+    expect(body.permissions).toEqual(["admin"]);
+    await app.close();
+    delete process.env.BOOTSTRAP_ADMIN_TOKEN;
+    delete process.env.BOOTSTRAP_ADMIN_WORKSPACE_ID;
   });
 
   it("authenticates valid API key via Authorization header", async () => {
@@ -170,6 +225,8 @@ describe("auth middleware and session", () => {
   });
 
   it("allows request with sufficient permissions", async () => {
+    process.env.NODE_ENV = "development";
+    process.env.ALLOW_LEGACY_HEADER_AUTH = "true";
     const app = createFastify();
     registerAuthMiddleware(app, createMockApiKeyManager());
     app.get("/logs", { preHandler: [requirePermission("read:logs")] }, async () => ({ items: [] }));
@@ -181,6 +238,8 @@ describe("auth middleware and session", () => {
     });
 
     expect(res.statusCode).toBe(200);
+    await app.close();
+    delete process.env.ALLOW_LEGACY_HEADER_AUTH;
   });
 
   it("denies request with insufficient permissions (403)", async () => {
@@ -208,6 +267,7 @@ describe("auth middleware and session", () => {
     const body = JSON.parse(res.body);
     expect(body.error).toBe("Insufficient permissions");
     expect(body.required).toBe("write:agents");
+    await app.close();
   });
 
   it("allows admin key to access everything", async () => {
@@ -231,5 +291,6 @@ describe("auth middleware and session", () => {
     });
 
     expect(res.statusCode).toBe(200);
+    await app.close();
   });
 });

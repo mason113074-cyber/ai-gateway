@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createDatabase } from "./connection";
-import { createSqliteAuditLogger } from "./sqlite-audit-logger";
+import { createAuditLogger } from "./audit-logger";
 
 const canLoadSqlite = (() => {
   try {
@@ -12,10 +12,10 @@ const canLoadSqlite = (() => {
 })();
 
 describe.runIf(canLoadSqlite)("SqliteAuditLogger", () => {
-  it("log and query return items", () => {
+  it("log and query return items", async () => {
     const db = createDatabase(":memory:");
-    const logger = createSqliteAuditLogger(db);
-    logger.log("ws1", {
+    const logger = createAuditLogger(db);
+    await logger.log("ws1", {
       eventType: "proxy.request",
       actorType: "agent",
       actorId: "agent-1",
@@ -23,7 +23,7 @@ describe.runIf(canLoadSqlite)("SqliteAuditLogger", () => {
       outcome: "success",
       metadata: { model: "gpt-4" },
     });
-    const result = logger.query({ workspaceId: "ws1", limit: 10 });
+    const result = await logger.query({ workspaceId: "ws1", limit: 10 });
     expect(result.items).toHaveLength(1);
     expect(result.total).toBe(1);
     expect(result.items[0].eventType).toBe("proxy.request");
@@ -31,38 +31,38 @@ describe.runIf(canLoadSqlite)("SqliteAuditLogger", () => {
     expect(result.items[0].metadata).toEqual({ model: "gpt-4" });
   });
 
-  it("query with filters", () => {
+  it("query with filters", async () => {
     const db = createDatabase(":memory:");
-    const logger = createSqliteAuditLogger(db);
-    logger.log("ws1", {
+    const logger = createAuditLogger(db);
+    await logger.log("ws1", {
       eventType: "proxy.request",
       actorType: "agent",
       actorId: "a1",
       action: "proxy",
       outcome: "success",
     });
-    logger.log("ws1", {
+    await logger.log("ws1", {
       eventType: "policy.deny",
       actorType: "agent",
       actorId: "a2",
       action: "deny",
       outcome: "denied",
     });
-    const all = logger.query({ workspaceId: "ws1" });
+    const all = await logger.query({ workspaceId: "ws1" });
     expect(all.items).toHaveLength(2);
-    const filtered = logger.query({ workspaceId: "ws1", eventType: "policy.deny" });
+    const filtered = await logger.query({ workspaceId: "ws1", eventType: "policy.deny" });
     expect(filtered.items).toHaveLength(1);
     expect(filtered.items[0].eventType).toBe("policy.deny");
-    const byActor = logger.query({ workspaceId: "ws1", actorId: "a1" });
+    const byActor = await logger.query({ workspaceId: "ws1", actorId: "a1" });
     expect(byActor.items).toHaveLength(1);
     expect(byActor.items[0].actorId).toBe("a1");
   });
 
-  it("pagination with limit and offset", () => {
+  it("pagination with limit and offset", async () => {
     const db = createDatabase(":memory:");
-    const logger = createSqliteAuditLogger(db);
+    const logger = createAuditLogger(db);
     for (let i = 0; i < 5; i++) {
-      logger.log("ws1", {
+      await logger.log("ws1", {
         eventType: "proxy.request",
         actorType: "agent",
         actorId: `agent-${i}`,
@@ -70,10 +70,10 @@ describe.runIf(canLoadSqlite)("SqliteAuditLogger", () => {
         outcome: "success",
       });
     }
-    const page1 = logger.query({ workspaceId: "ws1", limit: 2, offset: 0 });
+    const page1 = await logger.query({ workspaceId: "ws1", limit: 2, offset: 0 });
     expect(page1.items).toHaveLength(2);
     expect(page1.total).toBe(5);
-    const page2 = logger.query({ workspaceId: "ws1", limit: 2, offset: 2 });
+    const page2 = await logger.query({ workspaceId: "ws1", limit: 2, offset: 2 });
     expect(page2.items).toHaveLength(2);
     expect(page2.total).toBe(5);
   });
