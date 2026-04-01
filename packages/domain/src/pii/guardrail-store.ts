@@ -45,8 +45,7 @@ function rowToConfig(row: any): GuardrailConfig {
 }
 
 export function createGuardrailStore(db: Database): GuardrailStore {
-  const isPg = "execute" in db && !("run" in db);
-  const now = () => isPg ? new Date() : new Date().toISOString();
+  const now = () => new Date().toISOString();
 
   return {
     async get(workspaceId: string, type: string): Promise<GuardrailConfig | null> {
@@ -59,7 +58,7 @@ export function createGuardrailStore(db: Database): GuardrailStore {
             eq(guardrailConfigs.type, type)
           )
         );
-      const row = isPg ? (await (query as any).execute())[0] : (query as any).get();
+      const row = (query as any).get();
       if (!row) return null;
       return rowToConfig(row);
     },
@@ -87,31 +86,18 @@ export function createGuardrailStore(db: Database): GuardrailStore {
         updatedAt: currentTime,
       };
 
-      if (isPg) {
-        await (db as any).insert(guardrailConfigs)
-          .values(values)
-          .onConflictDoUpdate({
-            target: guardrailConfigs.id,
-            set: {
-              config: configJson,
-              enabled: enabled ? 1 : 0,
-              updatedAt: currentTime,
-            },
-          })
-          .execute();
-      } else {
-        (db as any).insert(guardrailConfigs)
-          .values(values)
-          .onConflictDoUpdate({
-            target: guardrailConfigs.id,
-            set: {
-              config: configJson,
-              enabled: enabled ? 1 : 0,
-              updatedAt: currentTime,
-            },
-          })
-          .run();
-      }
+      (db as any)
+        .insert(guardrailConfigs)
+        .values(values)
+        .onConflictDoUpdate({
+          target: guardrailConfigs.id,
+          set: {
+            config: configJson,
+            enabled: enabled ? 1 : 0,
+            updatedAt: currentTime,
+          },
+        })
+        .run();
 
       return {
         id,
@@ -119,8 +105,8 @@ export function createGuardrailStore(db: Database): GuardrailStore {
         type,
         config,
         enabled,
-        createdAt: currentTime instanceof Date ? currentTime.toISOString() : currentTime,
-        updatedAt: currentTime instanceof Date ? currentTime.toISOString() : currentTime,
+        createdAt: currentTime,
+        updatedAt: currentTime,
       };
     },
 
@@ -129,7 +115,7 @@ export function createGuardrailStore(db: Database): GuardrailStore {
         .select()
         .from(guardrailConfigs)
         .where(eq(guardrailConfigs.workspaceId, workspaceId));
-      const rows = isPg ? await (query as any).execute() : (query as any).all();
+      const rows = (query as any).all();
       return rows.map(rowToConfig);
     },
 
@@ -151,12 +137,12 @@ export function createGuardrailStore(db: Database): GuardrailStore {
           )
         );
       
-      if (isPg) await (updateQuery as any).execute(); else (updateQuery as any).run();
+      (updateQuery as any).run();
 
       return {
         ...existing,
         enabled,
-        updatedAt: currentTime instanceof Date ? currentTime.toISOString() : currentTime,
+        updatedAt: currentTime,
       };
     },
   };

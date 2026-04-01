@@ -1,6 +1,6 @@
 # AI Gateway
 
-Open-source LLM proxy with agent identity, cost tracking, governance, and guardrails. Self-host in under 5 minutes.
+Open-source LLM proxy with agent identity, cost tracking, governance, and guardrails.
 
 ## Who is this for?
 
@@ -15,7 +15,7 @@ git clone https://github.com/mason113074-cyber/ai-gateway.git
 cd ai-gateway
 cp .env.example .env
 # Edit .env and set OPENAI_API_KEY and ANTHROPIC_API_KEY
-# (Optional) Set DATABASE_URL=postgres://user:pass@host:port/db for PostgreSQL
+# Set BOOTSTRAP_ADMIN_TOKEN for admin APIs + web console proxy
 docker compose up -d
 ```
 
@@ -56,6 +56,15 @@ response = client.chat.completions.create(
 
 Every request is now logged, cost-tracked, and evaluated against policies and rate limits.
 
+## Authentication and security defaults
+
+- **Production default**: unauthenticated management access is denied.
+- **Admin management access**: use `Authorization: Bearer <BOOTSTRAP_ADMIN_TOKEN>` or a gateway API key with required permissions.
+- **Legacy header auth (`x-workspace-id` / `x-user-id`)** is **disabled by default** and only available when:
+  - `ALLOW_LEGACY_HEADER_AUTH=true`
+  - `NODE_ENV` is not `production`
+- Web console server-side API calls are proxied through `/api/gateway/*` and require `BOOTSTRAP_ADMIN_TOKEN` in web runtime.
+
 ## Features
 
 | Feature | Description |
@@ -64,8 +73,8 @@ Every request is now logged, cost-tracked, and evaluated against policies and ra
 | **Agent registry** | Auto-register agents, CRUD API |
 | **Policy engine** | Allow / deny / requires_approval |
 | **Cost dashboard** | Per-agent, per-team, per-model cost and tokens |
-| **Persistent storage** | SQLite (WAL) or PostgreSQL, proxy logs, agents, audit logs |
-| **Smart Routing** | Automatic fallback between providers (OpenAI ↔ Anthropic) |
+| **Persistent storage** | SQLite (WAL), proxy logs, agents, audit logs |
+| **Retry behavior** | Same-provider retries on transient upstream errors |
 | **Budgets** | Per-team monthly and per-agent daily caps (hard/soft) |
 | **RBAC + API keys** | SHA-256 hashed keys, permissions, model allowlists |
 | **PII guardrails** | Regex-based redact/warn/block (email, SSN, cards, etc.) |
@@ -96,17 +105,17 @@ Every request is now logged, cost-tracked, and evaluated against policies and ra
 |--------|------|-------------|
 | GET | `/health` | Liveness |
 | GET | `/api/session` | Current workspace / user / permissions |
-| GET | `/api/agents` | List agents |
+| GET | `/api/agents` | List agents (`read:agents`) |
 | POST | `/api/agents` | Create agent |
 | PATCH | `/api/agents/:id` | Update agent |
 | GET | `/api/audit-logs` | Query audit log (filters, pagination) |
 | GET | `/api/guardrails` | List guardrail configs |
 | POST | `/api/guardrails` | Create/update guardrail |
 | PATCH | `/api/guardrails/:id` | Enable/disable guardrail |
-| GET | `/api/rate-limits` | List rate limit configs |
-| POST | `/api/rate-limits` | Create/update rate limit |
-| DELETE | `/api/rate-limits/:id` | Remove rate limit |
-| GET | `/api/rate-limits/status` | Current usage per config |
+| GET | `/api/rate-limits` | List rate limit configs (`read:rate-limits`) |
+| POST | `/api/rate-limits` | Create/update rate limit (`write:rate-limits`) |
+| DELETE | `/api/rate-limits/:id` | Remove rate limit (`write:rate-limits`) |
+| GET | `/api/rate-limits/status` | Current usage per config (`read:rate-limits`) |
 | GET | `/api/logs` | Proxy request logs |
 | GET | `/api/stats` | Aggregated stats (cost, tokens) |
 | GET | `/api/budgets/teams` | List team budgets |
@@ -117,11 +126,19 @@ Every request is now logged, cost-tracked, and evaluated against policies and ra
 | GET | `/api/costs` | Cost attribution (groupBy) |
 | POST | `/api/policy/evaluate` | Evaluate policy for an action |
 | POST | `/api/keys` | Create API key |
-| GET | `/api/keys` | List API keys |
+| GET | `/api/keys` | List API keys (`read:keys`) |
 | PATCH | `/api/keys/:id` | Update key |
 | DELETE | `/api/keys/:id` | Revoke key |
 
-Authenticate with header: `Authorization: Bearer gw-<key>` (create keys via `/api/keys` with permission `manage:keys`).
+Authenticate with either:
+
+- `Authorization: Bearer gw-<key>` (gateway API key)
+- `Authorization: Bearer <BOOTSTRAP_ADMIN_TOKEN>` (bootstrap admin token from environment)
+
+## Current limitations (explicit)
+
+- `DATABASE_URL` (PostgreSQL) is currently **fail-closed** at startup in this release.
+- Cross-provider fallback adapters are not implemented; proxy will not auto-switch OpenAI ↔ Anthropic by default.
 
 ## Development
 

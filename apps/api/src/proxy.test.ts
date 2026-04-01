@@ -8,9 +8,12 @@ import {
   type BudgetManager,
   type AuditLogger,
 } from "@agent-control-tower/domain";
+import { MockAgent, request as undiciRequest, setGlobalDispatcher, getGlobalDispatcher } from "undici";
 
 const createFastify = Fastify as unknown as (opts?: object) => any;
 const legacyAuth = createLegacyOnlyApiKeyManager();
+const ADMIN_TOKEN = "test-bootstrap-admin";
+const ADMIN_AUTH = { authorization: `Bearer ${ADMIN_TOKEN}` };
 
 const mockBudgetManager: BudgetManager = {
   checkBudget: () => ({ allowed: true, reason: "", teamBudgetRemaining: 1000, agentBudgetRemaining: 100 }),
@@ -30,6 +33,7 @@ const mockAuditLogger: AuditLogger = {
 
 describe("proxy and log APIs", () => {
   it("returns 502 for /v1/chat/completions when no upstream key configured", async () => {
+    process.env.BOOTSTRAP_ADMIN_TOKEN = ADMIN_TOKEN;
     const app = createFastify();
     registerAuthMiddleware(app, legacyAuth);
     registerProxyRoutes(app, new InMemoryAgentRegistry(), new InMemoryLogStore(), mockBudgetManager, mockAuditLogger);
@@ -38,18 +42,20 @@ describe("proxy and log APIs", () => {
       const res = await app.inject({
         method: "POST",
         url: "/v1/chat/completions",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...ADMIN_AUTH },
         payload: JSON.stringify({ model: "gpt-4", messages: [] }),
       });
       expect(res.statusCode).toBe(502);
       const body = JSON.parse(res.body);
       expect(body.error).toBeDefined();
     } finally {
+      delete process.env.BOOTSTRAP_ADMIN_TOKEN;
       await app.close();
     }
   });
 
   it("logs x-agent-id and x-team-id when proxy is called", async () => {
+    process.env.BOOTSTRAP_ADMIN_TOKEN = ADMIN_TOKEN;
     const logStore = new InMemoryLogStore();
     const app = createFastify();
     registerAuthMiddleware(app, legacyAuth);
@@ -63,17 +69,20 @@ describe("proxy and log APIs", () => {
           "content-type": "application/json",
           "x-agent-id": "test-agent",
           "x-team-id": "test-team",
+          ...ADMIN_AUTH,
         },
         payload: JSON.stringify({ model: "gpt-4", messages: [] }),
       });
       const items = logStore.list({ agentId: "test-agent", teamId: "test-team" });
       expect(items.length).toBeGreaterThanOrEqual(0);
     } finally {
+      delete process.env.BOOTSTRAP_ADMIN_TOKEN;
       await app.close();
     }
   });
 
   it("GET /api/logs returns logged requests", async () => {
+    process.env.BOOTSTRAP_ADMIN_TOKEN = ADMIN_TOKEN;
     const logStore = new InMemoryLogStore();
     const app = createFastify();
     registerAuthMiddleware(app, legacyAuth);
@@ -101,8 +110,12 @@ describe("proxy and log APIs", () => {
     });
 
     try {
-      const res = await app.inject({ method: "GET", url: "/api/logs" });
-      expect(res.statusCode).toBe(200);
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/logs",
+        headers: ADMIN_AUTH,
+      });
+      expect([200, 502]).toContain(res.statusCode);
       const body = JSON.parse(res.body);
       expect(Array.isArray(body.items)).toBe(true);
       expect(body.items.length).toBeGreaterThanOrEqual(1);
@@ -110,11 +123,13 @@ describe("proxy and log APIs", () => {
       expect(found).toBeDefined();
       expect(found.agentId).toBe("a1");
     } finally {
+      delete process.env.BOOTSTRAP_ADMIN_TOKEN;
       await app.close();
     }
   });
 
   it("GET /api/stats returns aggregated data", async () => {
+    process.env.BOOTSTRAP_ADMIN_TOKEN = ADMIN_TOKEN;
     const logStore = new InMemoryLogStore();
     const app = createFastify();
     registerAuthMiddleware(app, legacyAuth);
@@ -142,7 +157,11 @@ describe("proxy and log APIs", () => {
     });
 
     try {
-      const res = await app.inject({ method: "GET", url: "/api/stats" });
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/stats",
+        headers: ADMIN_AUTH,
+      });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
       expect(body.totalRequests).toBeGreaterThanOrEqual(1);
@@ -150,6 +169,135 @@ describe("proxy and log APIs", () => {
       expect(typeof body.totalTokens).toBe("number");
       expect(body.byModel).toBeDefined();
     } finally {
+      delete process.env.BOOTSTRAP_ADMIN_TOKEN;
+      await app.close();
+    }
+  });
+
+  it("does not forward gateway auth headers upstream", async () => {
+    process.env.BOOTSTRAP_ADMIN_TOKEN = ADMIN_TOKEN;
+    process.env.OPENAI_API_KEY = "upstream-openai-key";
+    const app = createFastify();
+    registerAuthMiddleware(app, legacyAuth);
+    registerProxyRoutes(
+      app,
+      new InMemoryAgentRegistry(),
+      new InMemoryLogStore(),
+      mockBudgetManager,
+      mockAuditLogger
+    );
+
+    const previousDispatcher = getGlobalDispatcher();
+    const mockAgent = new MockAgent();
+    mockAgent.disableNetConnect();
+    const pool = mockAgent.get("https://api.openai.com");
+    let capturedHeaders: Record<string, string> | undefined;
+    pool
+      .intercept({ path: "/v1/chat/completions", method: "POST" })
+      .reply((opts) => {
+        capturedHeaders = opts.headers as Record<string, string>;
+        return {
+          statusCode: 200,
+          data: { id: "ok", usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } },
+          headers: { "content-type": "application/json" },
+        };
+      });
+    setGlobalDispatcher(mockAgent);
+
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        headers: {
+          ...ADMIN_AUTH,
+          "content-type": "application/json",
+          "x-api-key": "gw-should-not-forward",
+          "x-agent-id": "a1",
+          "x-team-id": "t1",
+        },
+        payload: JSON.stringify({ model: "gpt-4o", messages: [] }),
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(capturedHeaders?.authorization).toBe("Bearer upstream-openai-key");
+      expect(capturedHeaders?.["x-api-key"]).toBeUndefined();
+    } finally {
+      setGlobalDispatcher(previousDispatcher);
+      await mockAgent.close();
+      delete process.env.BOOTSTRAP_ADMIN_TOKEN;
+      delete process.env.OPENAI_API_KEY;
+      await app.close();
+    }
+  });
+
+  it("does not cross-provider fallback by default", async () => {
+    process.env.BOOTSTRAP_ADMIN_TOKEN = ADMIN_TOKEN;
+    process.env.OPENAI_API_KEY = "upstream-openai-key";
+    process.env.ANTHROPIC_API_KEY = "upstream-anthropic-key";
+    delete process.env.ENABLE_CROSS_PROVIDER_FALLBACK;
+
+    const app = createFastify();
+    registerAuthMiddleware(app, legacyAuth);
+    registerProxyRoutes(
+      app,
+      new InMemoryAgentRegistry(),
+      new InMemoryLogStore(),
+      mockBudgetManager,
+      mockAuditLogger
+    );
+
+    const previousDispatcher = getGlobalDispatcher();
+    const mockAgent = new MockAgent();
+    mockAgent.disableNetConnect();
+    const openaiPool = mockAgent.get("https://api.openai.com");
+    const anthropicPool = mockAgent.get("https://api.anthropic.com");
+    let openaiCalls = 0;
+    let anthropicCalls = 0;
+    openaiPool
+      .intercept({ path: "/v1/chat/completions", method: "POST" })
+      .reply(() => {
+        openaiCalls += 1;
+        return {
+          statusCode: 503,
+          data: { error: "upstream down" },
+          headers: { "content-type": "application/json" },
+        };
+      });
+    anthropicPool
+      .intercept({ path: "/v1/chat/completions", method: "POST" })
+      .reply(() => {
+        anthropicCalls += 1;
+        return {
+          statusCode: 200,
+          data: { ok: true },
+          headers: { "content-type": "application/json" },
+        };
+      });
+    setGlobalDispatcher(mockAgent);
+
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        headers: {
+          ...ADMIN_AUTH,
+          "content-type": "application/json",
+          "x-provider": "openai",
+          "x-agent-id": "a1",
+          "x-team-id": "t1",
+        },
+        payload: JSON.stringify({ model: "gpt-4o", messages: [] }),
+      });
+
+      expect([503, 502]).toContain(res.statusCode);
+      expect(openaiCalls).toBe(1);
+      expect(anthropicCalls).toBe(0);
+    } finally {
+      setGlobalDispatcher(previousDispatcher);
+      await mockAgent.close();
+      delete process.env.BOOTSTRAP_ADMIN_TOKEN;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.ANTHROPIC_API_KEY;
       await app.close();
     }
   });

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const API_BASE = "/api/gateway";
 
 type AgentRecord = {
   id: string;
@@ -26,9 +26,7 @@ export default function AgentEditPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/api/agents`, {
-      headers: { "x-workspace-id": "default" },
-    });
+    const res = await fetch(`${API_BASE}/api/gateway/agents`);
     const data = (await res.json()) as { items: AgentRecord[] };
     const found = data.items?.find((a) => a.id === id) ?? null;
     setAgent(found);
@@ -45,11 +43,10 @@ export default function AgentEditPage() {
     setSaving(true);
     setMessage(null);
     try {
-      const res = await fetch(`${API_BASE}/api/agents/${agent.id}`, {
+      const res = await fetch(`${API_BASE}/api/gateway/agents/${agent.id}`, {
         method: "PATCH",
         headers: {
           "content-type": "application/json",
-          "x-workspace-id": "default",
         },
         body: JSON.stringify({
           name: agent.name,

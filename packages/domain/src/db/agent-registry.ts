@@ -20,25 +20,24 @@ function rowToRecord(r: any): AgentRecord {
 }
 
 export function createAgentRegistry(db: Database): AgentRegistry {
-  const isPg = "execute" in db && !("run" in db);
-  const now = () => isPg ? new Date() : new Date().toISOString();
+  const now = () => new Date().toISOString();
 
   return {
     async list(workspaceId: string): Promise<AgentRecord[]> {
-      const query = db
+      const rows = db
         .select()
         .from(agents)
-        .where(eq(agents.workspaceId, workspaceId));
-      const rows = isPg ? await (query as any).execute() : (query as any).all();
+        .where(eq(agents.workspaceId, workspaceId))
+        .all();
       return rows.map(rowToRecord);
     },
 
     async getById(workspaceId: string, id: string): Promise<AgentRecord | undefined> {
-      const query = db
+      const row = db
         .select()
         .from(agents)
-        .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, id)));
-      const row = isPg ? (await (query as any).execute())[0] : (query as any).get();
+        .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, id)))
+        .get();
       return row ? rowToRecord(row) : undefined;
     },
 
@@ -60,11 +59,7 @@ export function createAgentRegistry(db: Database): AgentRegistry {
         lastSeenAt: createdAt,
       };
 
-      if (isPg) {
-        await (db as any).insert(agents).values(values).execute();
-      } else {
-        (db as any).insert(agents).values(values).run();
-      }
+      db.insert(agents).values(values).run();
       return { ...agent, id };
     },
 
@@ -89,16 +84,10 @@ export function createAgentRegistry(db: Database): AgentRegistry {
         lastSeenAt,
       };
 
-      const updateQuery = db
-        .update(agents)
+      db.update(agents)
         .set(updateData)
-        .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, id)));
-
-      if (isPg) {
-        await (updateQuery as any).execute();
-      } else {
-        (updateQuery as any).run();
-      }
+        .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, id)))
+        .run();
 
       return this.getById(workspaceId, id);
     },
@@ -107,16 +96,10 @@ export function createAgentRegistry(db: Database): AgentRegistry {
       const existing = await this.getById(workspaceId, agentId);
       if (existing) {
         const lastSeenAt = now();
-        const updateQuery = db
-          .update(agents)
+        db.update(agents)
           .set({ lastSeenAt })
-          .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentId)));
-        
-        if (isPg) {
-          await (updateQuery as any).execute();
-        } else {
-          (updateQuery as any).run();
-        }
+          .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentId)))
+          .run();
         return existing;
       }
 
@@ -147,11 +130,7 @@ export function createAgentRegistry(db: Database): AgentRegistry {
         lastSeenAt: createdAt,
       };
 
-      if (isPg) {
-        await (db as any).insert(agents).values(values).execute();
-      } else {
-        (db as any).insert(agents).values(values).run();
-      }
+      db.insert(agents).values(values).run();
       return record;
     },
   };

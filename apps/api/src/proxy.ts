@@ -6,7 +6,6 @@ import {
   detectPii,
   redactRequestBody,
   extractPromptText,
-  getNextProvider,
   type LogStore,
   type AgentRegistry,
   type BudgetManager,
@@ -19,6 +18,13 @@ import {
 interface ProxyApp {
   all(path: string, handler: (req: unknown, reply: unknown) => Promise<void>): void;
 }
+
+type ReplyLike = {
+  status: (code: number) => ReplyLike;
+  header: (name: string, value: string) => ReplyLike;
+  send: (body: unknown) => void;
+  raw: NodeJS.WritableStream & { end: () => void };
+};
 
 function getUpstreamBaseUrl(provider: string): string | null {
   const config = DEFAULT_PROVIDERS[provider as keyof typeof DEFAULT_PROVIDERS];
@@ -40,7 +46,7 @@ export function registerProxyRoutes(
   options?: {
     getPiiConfig?: (
       workspaceId: string
-    ) => PiiDetectorConfig & { enabled: boolean };
+    ) => Promise<PiiDetectorConfig & { enabled: boolean }> | (PiiDetectorConfig & { enabled: boolean });
     getRateLimitConfig?: (
       workspaceId: string,
       teamId: string,
@@ -53,6 +59,8 @@ export function registerProxyRoutes(
     rateLimiter?: RateLimiter;
   }
 ): void {
+  const retryStatusCodes = new Set([429, 500, 502, 503, 504]);
+
   app.all("/v1/*", async (req: unknown, reply: unknown) => {
     const req_ = req as {
       headers: Record<string, string | string[] | undefined>;
@@ -62,8 +70,7 @@ export function registerProxyRoutes(
       workspaceId?: string;
       allowedModels?: string[] | null;
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const reply_ = reply as any;
+    const reply_ = reply as ReplyLike;
     const startTime = Date.now();
     const agentId = (req_.headers["x-agent-id"] as string) ?? "anonymous";
     const teamId = (req_.headers["x-team-id"] as string) ?? "default";
@@ -292,7 +299,7 @@ export function registerProxyRoutes(
 
     // ── Phase 8: PII Guardrail ─────────────────────────────
     if (body && options?.getPiiConfig) {
-      const piiConfig = options.getPiiConfig(workspaceId);
+      const piiConfig = await options.getPiiConfig(workspaceId);
       if (piiConfig.enabled) {
         const promptText = extractPromptText(body);
         const piiMatches = detectPii(promptText, piiConfig);
@@ -352,46 +359,43 @@ export function registerProxyRoutes(
 
     const headers: Record<string, string> = {
       "content-type": (req_.headers["content-type"] as string) ?? "application/json",
-      authorization: (req_.headers["authorization"] as string) ?? `Bearer ${apiKey}`,
     };
-    if (req_.headers["x-api-key"]) headers["x-api-key"] = req_.headers["x-api-key"] as string;
 
     try {
       let currentProvider = provider;
       let currentApiKey = apiKey;
       let currentUpstreamUrl = upstreamUrl;
-      let res: any;
+      let res: Awaited<ReturnType<typeof undiciRequest>> | null = null;
       let attempts = 0;
       const maxAttempts = 3;
 
       while (attempts < maxAttempts) {
         attempts++;
         res = await undiciRequest(currentUpstreamUrl, {
-          method: req_.method as any,
+          method: req_.method,
           headers: {
             ...headers,
-            authorization: `Bearer ${currentApiKey}`,
+            ...(currentProvider !== "anthropic" && {
+              authorization: `Bearer ${currentApiKey}`,
+            }),
             ...(currentProvider === "anthropic" && { "x-api-key": currentApiKey, "anthropic-version": "2023-06-01" }),
           },
           body: body ?? undefined,
         });
 
-        if (res.statusCode < 400 || ![429, 500, 502, 503, 504].includes(res.statusCode)) {
+        if (res.statusCode < 400 || !retryStatusCodes.has(res.statusCode)) {
           break;
         }
 
-        const nextProvider = getNextProvider(currentProvider);
-        if (!nextProvider) break;
-
-        const nextApiKey = getUpstreamApiKey(nextProvider);
-        const nextBaseUrl = getUpstreamBaseUrl(nextProvider);
+        const nextApiKey = getUpstreamApiKey(currentProvider);
+        const nextBaseUrl = getUpstreamBaseUrl(currentProvider);
         if (!nextApiKey || !nextBaseUrl) break;
-
-        currentProvider = nextProvider;
         currentApiKey = nextApiKey;
         currentUpstreamUrl = `${nextBaseUrl.replace(/\/$/, "")}/v1/${pathSeg}`;
-        
-        console.log(`Fallback: Switching from ${provider} to ${currentProvider} due to status ${res.statusCode}`);
+      }
+
+      if (!res) {
+        throw new Error("No upstream response available");
       }
 
       const latencyMs = Date.now() - startTime;

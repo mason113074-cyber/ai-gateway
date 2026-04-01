@@ -38,16 +38,42 @@ function getApiKeyFromRequest(request: { headers: Record<string, string | string
   return null;
 }
 
+function getHeaderValue(
+  headers: Record<string, string | string[] | undefined>,
+  name: string
+): string | undefined {
+  const value = headers[name];
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value[0];
+  return undefined;
+}
+
 export function createAuthMiddleware(
   apiKeyManager: ApiKeyManager,
   options?: { auditLog?: AuditLogFn }
 ) {
   const auditLog = options?.auditLog;
+  const isProduction = process.env.NODE_ENV === "production";
+  const allowLegacyHeaderAuth =
+    process.env.ALLOW_LEGACY_HEADER_AUTH === "true" && !isProduction;
+  const bootstrapAdminToken = process.env.BOOTSTRAP_ADMIN_TOKEN;
+  const bootstrapWorkspaceId = process.env.BOOTSTRAP_ADMIN_WORKSPACE_ID ?? "default";
 
   return async function authMiddleware(
     request: AuthRequest,
     reply: { status: (code: number) => { send: (body: unknown) => void } }
   ): Promise<void> {
+    const authHeader = getHeaderValue(request.headers, "authorization");
+    if (bootstrapAdminToken && authHeader === `Bearer ${bootstrapAdminToken}`) {
+      request.workspaceId = bootstrapWorkspaceId;
+      request.userId = "bootstrap-admin";
+      request.teamId = undefined;
+      request.permissions = ["admin"];
+      request.allowedModels = null;
+      request.userRole = "owner";
+      return;
+    }
+
     const rawKey = getApiKeyFromRequest(request);
     if (rawKey) {
       const record = apiKeyManager.lookupByKey(rawKey);
@@ -75,14 +101,24 @@ export function createAuthMiddleware(
       request.userRole = "viewer";
       return;
     }
-    const workspaceId = request.headers["x-workspace-id"];
-    const userId = request.headers["x-user-id"];
-    request.workspaceId = typeof workspaceId === "string" ? workspaceId : undefined;
-    request.userId = typeof userId === "string" ? userId : undefined;
-    request.teamId = undefined;
-    request.permissions = ["admin"];
-    request.allowedModels = null;
-    request.userRole = "owner";
+
+    if (allowLegacyHeaderAuth) {
+      const workspaceId = getHeaderValue(request.headers, "x-workspace-id");
+      const userId = getHeaderValue(request.headers, "x-user-id");
+      request.workspaceId = workspaceId;
+      request.userId = userId;
+      request.teamId = undefined;
+      request.permissions = ["admin"];
+      request.allowedModels = null;
+      request.userRole = "owner";
+      return;
+    }
+
+    reply.status(401).send({
+      error: "Authentication required",
+      message:
+        "Provide a valid gateway API key or bootstrap admin bearer token. Legacy header auth is disabled.",
+    });
   };
 }
 

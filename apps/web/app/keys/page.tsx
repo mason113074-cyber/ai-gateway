@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
-const LEGACY_HEADERS = { "x-workspace-id": "default" };
+const API_BASE = "/api/gateway";
 
 const PERMISSION_OPTIONS = [
   "proxy",
+  "read:agents",
   "read:logs",
   "read:audit",
   "read:costs",
+  "read:keys",
+  "read:rate-limits",
   "write:agents",
   "write:budgets",
+  "write:rate-limits",
   "write:policies",
   "manage:keys",
   "admin",
@@ -42,7 +45,7 @@ export default function KeysPage() {
   const [items, setItems] = useState<ApiKeyRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [createName, setCreateName] = useState("");
-  const [createPermissions, setCreatePermissions] = useState<string[]>(["read:logs", "read:audit"]);
+  const [createPermissions, setCreatePermissions] = useState<string[]>(["read:keys", "read:audit"]);
   const [createTeamId, setCreateTeamId] = useState("");
   const [createAllowedModels, setCreateAllowedModels] = useState<string[]>([]);
   const [createRateLimit, setCreateRateLimit] = useState("");
@@ -53,7 +56,7 @@ export default function KeysPage() {
 
   const loadKeys = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/keys`, { headers: LEGACY_HEADERS });
+      const res = await fetch(`${API_BASE}/keys`);
       if (!res.ok) throw new Error("Failed to load keys");
       const data = (await res.json()) as { items: ApiKeyRecord[] };
       setItems(data.items ?? []);
@@ -85,9 +88,9 @@ export default function KeysPage() {
     if (!createName.trim()) return;
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/keys`, {
+      const res = await fetch(`${API_BASE}/keys`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...LEGACY_HEADERS },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: createName.trim(),
           permissions: createPermissions,
@@ -104,7 +107,7 @@ export default function KeysPage() {
       const data = (await res.json()) as ApiKeyRecord & { rawKey?: string };
       if (data.rawKey) setRawKeyModal(data.rawKey);
       setCreateName("");
-      setCreatePermissions(["read:logs", "read:audit"]);
+      setCreatePermissions(["read:keys", "read:audit"]);
       setCreateTeamId("");
       setCreateAllowedModels([]);
       setCreateRateLimit("");
@@ -118,9 +121,8 @@ export default function KeysPage() {
   const handleRevoke = async (id: string) => {
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/keys/${id}`, {
+      const res = await fetch(`${API_BASE}/keys/${id}`, {
         method: "DELETE",
-        headers: LEGACY_HEADERS,
       });
       if (!res.ok) throw new Error("Revoke failed");
       setRevokeId(null);

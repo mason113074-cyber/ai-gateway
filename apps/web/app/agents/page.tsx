@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const API_BASE = "/api/gateway";
 
 type AgentRecord = {
   id: string;
@@ -14,9 +14,8 @@ type AgentRecord = {
 };
 
 async function getAgents(): Promise<AgentRecord[]> {
-  const res = await fetch(`${API_BASE}/api/agents`, {
+  const res = await fetch(`${API_BASE}/api/gateway/agents`, {
     cache: "no-store",
-    headers: { "x-workspace-id": "default" },
   });
   if (!res.ok) return [];
   const data = (await res.json()) as { items: AgentRecord[] };

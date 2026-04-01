@@ -20,7 +20,7 @@ export async function queryCostAttribution(
     endDate?: string;
   }
 ): Promise<CostAttributionRow[]> {
-  const isPg = "execute" in db && !("run" in db);
+  type GroupByField = typeof proxyLogs.teamId | typeof proxyLogs.agentId | typeof proxyLogs.model;
   const conditions = [eq(proxyLogs.workspaceId, workspaceId)];
   if (opts.startDate)
     conditions.push(gte(proxyLogs.timestamp, opts.startDate as any));
@@ -28,7 +28,7 @@ export async function queryCostAttribution(
     conditions.push(lte(proxyLogs.timestamp, opts.endDate as any));
   const whereClause = and(...conditions);
 
-  let groupField: any;
+  let groupField: GroupByField | ReturnType<typeof sql<string>>;
   if (opts.groupBy === "team") {
     groupField = proxyLogs.teamId;
   } else if (opts.groupBy === "agent") {
@@ -37,9 +37,7 @@ export async function queryCostAttribution(
     groupField = proxyLogs.model;
   } else {
     // team,model
-    groupField = isPg 
-      ? sql<string>`${proxyLogs.teamId} || ':' || ${proxyLogs.model}`
-      : sql<string>`${proxyLogs.teamId} || ':' || ${proxyLogs.model}`;
+    groupField = sql<string>`${proxyLogs.teamId} || ':' || ${proxyLogs.model}`;
   }
 
   const query = db
@@ -62,7 +60,7 @@ export async function queryCostAttribution(
     query.groupBy(proxyLogs.teamId, proxyLogs.model);
   }
 
-  const rows = isPg ? await (query as any).execute() : (query as any).all();
+  const rows = (query as any).all();
   
   return rows.map((r: any) => ({
     groupKey: String(r.groupKey),

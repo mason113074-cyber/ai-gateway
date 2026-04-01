@@ -29,6 +29,9 @@ const mockAuditLogger: AuditLogger = {
 };
 
 describe("agents API", () => {
+  const bootstrapHeaders = { authorization: "Bearer test-bootstrap-token" };
+  process.env.BOOTSTRAP_ADMIN_TOKEN = "test-bootstrap-token";
+
   it("GET /api/agents returns list from registry", async () => {
     const registry = new InMemoryAgentRegistry();
     registry.ensureExists("default", "agent-1");
@@ -45,7 +48,7 @@ describe("agents API", () => {
       const res = await app.inject({
         method: "GET",
         url: "/api/agents",
-        headers: { "x-workspace-id": "default" },
+        headers: bootstrapHeaders,
       });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
@@ -71,7 +74,10 @@ describe("agents API", () => {
       const res = await app.inject({
         method: "POST",
         url: "/api/agents",
-        headers: { "content-type": "application/json", "x-workspace-id": "default" },
+        headers: {
+          ...bootstrapHeaders,
+          "content-type": "application/json",
+        },
         payload: {
           name: "New Agent",
           owner: "u1",
@@ -109,7 +115,10 @@ describe("agents API", () => {
       const res = await app.inject({
         method: "PATCH",
         url: "/api/agents/patch-me",
-        headers: { "content-type": "application/json", "x-workspace-id": "default" },
+        headers: {
+          ...bootstrapHeaders,
+          "content-type": "application/json",
+        },
         payload: { name: "Updated Name" },
       });
       expect(res.statusCode).toBe(200);
@@ -137,17 +146,17 @@ describe("agents API", () => {
         method: "POST",
         url: "/v1/chat/completions",
         headers: {
+          ...bootstrapHeaders,
           "content-type": "application/json",
           "x-agent-id": "auto-agent-1",
           "x-team-id": "team-1",
-          "x-workspace-id": "default",
         },
         payload: JSON.stringify({ model: "gpt-4", messages: [] }),
       });
       const listRes = await app.inject({
         method: "GET",
         url: "/api/agents",
-        headers: { "x-workspace-id": "default" },
+        headers: bootstrapHeaders,
       });
       const body = JSON.parse(listRes.body);
       const found = body.items?.find((a: { id: string }) => a.id === "auto-agent-1");

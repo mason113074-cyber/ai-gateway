@@ -7,13 +7,11 @@ import schema from "./schema.js";
 const { proxyLogs } = schema;
 
 export function createLogStore(db: Database): LogStore {
-  const isPg = "execute" in db && !("run" in db);
-
   return {
     async append(log: ProxyRequestLog): Promise<void> {
       const values = {
         id: log.id,
-        timestamp: isPg ? new Date(log.timestamp) : log.timestamp,
+        timestamp: log.timestamp,
         workspaceId: log.workspaceId,
         agentId: log.agentId,
         teamId: log.teamId,
@@ -28,12 +26,7 @@ export function createLogStore(db: Database): LogStore {
         costUsd: log.costUsd,
         error: log.error,
       };
-
-      if (isPg) {
-        await (db as any).insert(proxyLogs).values(values).execute();
-      } else {
-        (db as any).insert(proxyLogs).values(values).run();
-      }
+      (db as any).insert(proxyLogs).values(values).run();
     },
 
     async list(opts?: {
@@ -41,23 +34,21 @@ export function createLogStore(db: Database): LogStore {
       teamId?: string;
       limit?: number;
     }): Promise<ProxyRequestLog[]> {
-      const conditions = [];
+      const conditions: ReturnType<typeof eq>[] = [];
       if (opts?.agentId) conditions.push(eq(proxyLogs.agentId, opts.agentId));
       if (opts?.teamId) conditions.push(eq(proxyLogs.teamId, opts.teamId));
       const limit = opts?.limit ?? 1000;
       
-      let query = db
+      const query = db
         .select()
         .from(proxyLogs)
         .where(conditions.length ? and(...conditions) : undefined)
         .orderBy(desc(proxyLogs.timestamp))
         .limit(limit);
-
-      const rows = isPg ? await (query as any).execute() : (query as any).all();
-      
+      const rows = (query as any).all();
       return rows.map((r: any) => ({
         id: r.id,
-        timestamp: r.timestamp instanceof Date ? r.timestamp.toISOString() : r.timestamp,
+        timestamp: r.timestamp,
         workspaceId: r.workspaceId,
         agentId: r.agentId,
         teamId: r.teamId,
@@ -75,7 +66,7 @@ export function createLogStore(db: Database): LogStore {
     },
 
     async getStats(opts?: { agentId?: string; teamId?: string }) {
-      const conditions = [];
+      const conditions: ReturnType<typeof eq>[] = [];
       if (opts?.agentId) conditions.push(eq(proxyLogs.agentId, opts.agentId));
       if (opts?.teamId) conditions.push(eq(proxyLogs.teamId, opts.teamId));
       const where = conditions.length ? and(...conditions) : undefined;
@@ -90,9 +81,7 @@ export function createLogStore(db: Database): LogStore {
         .from(proxyLogs)
         .where(where)
         .groupBy(proxyLogs.model);
-
-      const rows = isPg ? await (query as any).execute() : (query as any).all();
-      
+      const rows = (query as any).all();
       const byModel: Record<
         string,
         { requests: number; costUsd: number; tokens: number }
