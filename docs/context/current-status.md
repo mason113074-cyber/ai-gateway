@@ -12,7 +12,7 @@
   - Phase 10: Dockerfiles, docker-compose.yml, README, CONTRIBUTING, LICENSE, CI
   - Phase 11: Advanced PII patterns, rate limiting, and storage hardening shipped; PostgreSQL and cross-provider fallback are intentionally disabled for safety in v0.1.0
 - **Database**: 10 tables (proxy_logs, agents, audit_logs, team_budgets, agent_budgets, users, api_keys, guardrail_configs, rate_limit_windows, rate_limit_configs)
-- **API routes**: 22+ endpoints (proxy /v1/*, agents, logs, audit, budgets, costs, keys, guardrails, rate-limits, stats, health, session, policy)
+- **API routes**: 22+ endpoints (proxy /v1/*, agents, logs, audit, budgets, costs, keys, guardrails, rate-limits, stats, health, metrics, session, policy)
 - **In progress**: Production hardening and correctness repair completed:
   - `server.ts` corruption removed and endpoint permission mapping aligned to clearer RBAC names
   - Auth default hardened: no unauthenticated management access, dev-only legacy header mode, bootstrap admin bearer token support
@@ -20,5 +20,10 @@
   - Fallback behavior: cross-provider fallback removed by default; retries stay within the same provider only
   - Database truthfulness: runtime fails closed when `DATABASE_URL` is set (PostgreSQL unsupported in this release)
   - Web console now calls same-origin `/api/gateway/*` server proxy with bearer auth instead of hardcoded `x-workspace-id`
+- **Recent observability / proxy hardening**:
+  - `GET /health` and `GET /metrics` bypass global auth (load balancers and Prometheus).
+  - Proxy uses Fastify `request.body` with a `/v1/*`-scoped JSON parser; SSE responses set streaming headers where applicable.
+  - `GET /metrics` exposes Prometheus text (`gateway_proxy_requests_total` per provider/status, `gateway_process_heap_bytes`).
+  - Optional: Dependabot and CodeQL under `.github/`; see `docs/porting-pdf-review.md` for the PDF review port notes.
 - **Blockers**: None.
 - **Next 3 priorities**: (1) Add explicit request/response adapter layer before re-enabling cross-provider fallback. (2) Implement full PostgreSQL runtime support with parity tests. (3) Add web automated tests for admin console flows.

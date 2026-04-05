@@ -2,6 +2,7 @@ import "dotenv/config";
 import path from "node:path";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import { renderMetrics } from "./metrics.js";
 import {
   evaluatePolicy,
   mockApprovals,
@@ -44,6 +45,23 @@ type FastifyLike = Parameters<typeof registerProxyRoutes>[0] & {
   log: { error: (e: unknown) => void };
 };
 
+type ProxyScopeLike = Parameters<typeof registerProxyRoutes>[0] & {
+  addContentTypeParser: (
+    contentType: string,
+    opts: { parseAs: "string"; bodyLimit: number },
+    parser: (
+      req: unknown,
+      body: string,
+      done: (err: Error | null, body?: string) => void
+    ) => void
+  ) => void;
+};
+
+type HeaderSendReply = {
+  header: (name: string, value: string) => HeaderSendReply;
+  send: (body: unknown) => unknown;
+};
+
 const dbPath = process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "gateway.db");
 const { db, raw } = createDatabaseWithRaw(dbPath);
 const logStore = createLogStore(db);
@@ -83,14 +101,29 @@ registerAuthMiddleware(
   }
 );
 
-registerProxyRoutes(app, agentRegistry, logStore, budgetManager, auditLogger, {
-  getPiiConfig: (workspaceId) => getPiiConfig(guardrailStore, workspaceId),
-  getRateLimitConfig: (workspaceId, teamId, agentId) =>
-    rateLimitConfigStore.getEffectiveConfig(workspaceId, teamId, agentId),
-  rateLimiter,
+await app.register(async (proxyScope: ProxyScopeLike) => {
+  proxyScope.addContentTypeParser(
+    "application/json",
+    { parseAs: "string", bodyLimit: 10485760 },
+    (_req: unknown, body: string, done: (err: Error | null, body?: string) => void) => {
+      done(null, body);
+    }
+  );
+  registerProxyRoutes(proxyScope as Parameters<typeof registerProxyRoutes>[0], agentRegistry, logStore, budgetManager, auditLogger, {
+    getPiiConfig: (workspaceId) => getPiiConfig(guardrailStore, workspaceId),
+    getRateLimitConfig: (workspaceId, teamId, agentId) =>
+      rateLimitConfigStore.getEffectiveConfig(workspaceId, teamId, agentId),
+    rateLimiter,
+  });
 });
 
 app.get("/health", async () => ({ ok: true, service: "ai-gateway-api" }));
+
+app.get("/metrics", async (_request: unknown, reply: HeaderSendReply) => {
+  return reply
+    .header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+    .send(renderMetrics());
+});
 
 app.get("/api/session", async (request: AuthedRequest) => ({
   workspaceId: request.workspaceId ?? null,
