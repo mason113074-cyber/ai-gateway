@@ -122,6 +122,19 @@ export function createAuthMiddleware(
   };
 }
 
+type PreHandlerRequest = AuthRequest & {
+  method?: string;
+  url?: string;
+  routerPath?: string;
+};
+
+function isPublicMonitoringGet(req: PreHandlerRequest): boolean {
+  if (req.method !== "GET") return false;
+  if (req.routerPath === "/health" || req.routerPath === "/metrics") return true;
+  const path = typeof req.url === "string" ? req.url.split("?")[0] : "";
+  return path === "/health" || path === "/metrics";
+}
+
 export function registerAuthMiddleware(
   app: { addHook: (name: string, fn: (req: AuthRequest, reply: unknown) => Promise<void>) => void },
   apiKeyManager: ApiKeyManager,
@@ -129,6 +142,8 @@ export function registerAuthMiddleware(
 ): void {
   const middleware = createAuthMiddleware(apiKeyManager, options);
   app.addHook("preHandler", async (request: AuthRequest, reply: unknown) => {
+    const req = request as PreHandlerRequest;
+    if (isPublicMonitoringGet(req)) return;
     await middleware(request, reply as { status: (code: number) => { send: (body: unknown) => void } });
   });
 }
