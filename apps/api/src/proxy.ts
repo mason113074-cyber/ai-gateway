@@ -1,4 +1,5 @@
 import { request as undiciRequest } from "undici";
+import { recordProxyRequest } from "./metrics.js";
 import {
   DEFAULT_PROVIDERS,
   evaluatePolicy,
@@ -25,6 +26,36 @@ type ReplyLike = {
   send: (body: unknown) => void;
   raw: NodeJS.WritableStream & { end: () => void };
 };
+
+/** Normalize Fastify `request.body` (JSON object, raw string, or empty) for upstream proxy + governance. */
+export function parseProxyRequestBody(body: unknown): { bodyStr: string | undefined; model: string } {
+  let bodyStr: string | undefined;
+  if (body === undefined || body === null) {
+    bodyStr = undefined;
+  } else if (typeof body === "string") {
+    bodyStr = body;
+  } else if (Buffer.isBuffer(body)) {
+    bodyStr = body.toString("utf-8");
+  } else if (typeof body === "object") {
+    bodyStr = JSON.stringify(body);
+  } else {
+    bodyStr = String(body);
+  }
+
+  let model = "unknown";
+  if (body !== null && typeof body === "object" && !Buffer.isBuffer(body)) {
+    const m = (body as { model?: unknown }).model;
+    if (typeof m === "string") model = m;
+  } else if (bodyStr) {
+    try {
+      const p = JSON.parse(bodyStr) as { model?: string };
+      if (typeof p.model === "string") model = p.model;
+    } catch {
+      // non-JSON body
+    }
+  }
+  return { bodyStr, model };
+}
 
 function getUpstreamBaseUrl(provider: string): string | null {
   const config = DEFAULT_PROVIDERS[provider as keyof typeof DEFAULT_PROVIDERS];
@@ -66,7 +97,7 @@ export function registerProxyRoutes(
       headers: Record<string, string | string[] | undefined>;
       params?: { "*"?: string };
       method: string;
-      raw?: { body?: { text: () => Promise<string> } };
+      body?: unknown;
       workspaceId?: string;
       allowedModels?: string[] | null;
     };
@@ -111,22 +142,9 @@ export function registerProxyRoutes(
 
     const pathSeg = req_.params?.["*"] ?? "";
     const upstreamUrl = `${baseUrl.replace(/\/$/, "")}/v1/${pathSeg}`;
-    let body: string | undefined;
-    let model = "unknown";
-    try {
-      const rawBody = req_.raw?.body;
-      if (rawBody && typeof rawBody.text === "function") {
-        body = await rawBody.text();
-        try {
-          const parsed = JSON.parse(body) as { model?: string };
-          if (parsed.model) model = parsed.model;
-        } catch {
-          // ignore
-        }
-      }
-    } catch {
-      // no body
-    }
+    const parsedBody = parseProxyRequestBody(req_.body);
+    let body: string | undefined = parsedBody.bodyStr;
+    let model = parsedBody.model;
 
     const decision = evaluatePolicy({
       actionType: "write",
@@ -398,6 +416,7 @@ export function registerProxyRoutes(
         throw new Error("No upstream response available");
       }
 
+      recordProxyRequest(currentProvider, String(res.statusCode));
       const latencyMs = Date.now() - startTime;
       reply_.header("x-proxy-latency-ms", String(latencyMs));
       const contentType =
@@ -465,7 +484,11 @@ export function registerProxyRoutes(
           outcome: res.statusCode >= 400 ? "error" : "success",
           metadata: { statusCode: res.statusCode, latencyMs },
         });
-        reply_.status(res.statusCode).header("content-type", contentType);
+        reply_
+          .status(res.statusCode)
+          .header("content-type", contentType)
+          .header("cache-control", "no-cache")
+          .header("connection", "keep-alive");
         if (res.body) {
           const src = res.body as NodeJS.ReadableStream;
           const rawStream = reply_.raw as NodeJS.WritableStream & { end: () => void };
@@ -542,6 +565,7 @@ export function registerProxyRoutes(
       });
       return reply_.status(res.statusCode).header("content-type", contentType).send(text);
     } catch (err) {
+      recordProxyRequest(provider, "502");
       const latencyMs = Date.now() - startTime;
       const errorMessage = err instanceof Error ? err.message : String(err);
       logStore.append({

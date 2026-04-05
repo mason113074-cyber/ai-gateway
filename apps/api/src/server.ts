@@ -1,7 +1,8 @@
 import "dotenv/config";
 import path from "node:path";
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
+import { renderMetrics } from "./metrics.js";
 import {
   evaluatePolicy,
   mockApprovals,
@@ -83,14 +84,29 @@ registerAuthMiddleware(
   }
 );
 
-registerProxyRoutes(app, agentRegistry, logStore, budgetManager, auditLogger, {
-  getPiiConfig: (workspaceId) => getPiiConfig(guardrailStore, workspaceId),
-  getRateLimitConfig: (workspaceId, teamId, agentId) =>
-    rateLimitConfigStore.getEffectiveConfig(workspaceId, teamId, agentId),
-  rateLimiter,
+await app.register(async (proxyScope: FastifyInstance) => {
+  proxyScope.addContentTypeParser(
+    "application/json",
+    { parseAs: "string", bodyLimit: 10485760 },
+    (_req, body, done) => {
+      done(null, body);
+    }
+  );
+  registerProxyRoutes(proxyScope as Parameters<typeof registerProxyRoutes>[0], agentRegistry, logStore, budgetManager, auditLogger, {
+    getPiiConfig: (workspaceId) => getPiiConfig(guardrailStore, workspaceId),
+    getRateLimitConfig: (workspaceId, teamId, agentId) =>
+      rateLimitConfigStore.getEffectiveConfig(workspaceId, teamId, agentId),
+    rateLimiter,
+  });
 });
 
 app.get("/health", async () => ({ ok: true, service: "ai-gateway-api" }));
+
+app.get("/metrics", async (_request, reply) => {
+  return reply
+    .header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+    .send(renderMetrics());
+});
 
 app.get("/api/session", async (request: AuthedRequest) => ({
   workspaceId: request.workspaceId ?? null,

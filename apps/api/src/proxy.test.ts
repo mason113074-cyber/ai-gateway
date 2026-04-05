@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
-import { registerProxyRoutes } from "./proxy.js";
+import { parseProxyRequestBody, registerProxyRoutes } from "./proxy.js";
 import { registerAuthMiddleware, createLegacyOnlyApiKeyManager } from "./auth-middleware.js";
 import {
   InMemoryAgentRegistry,
@@ -30,6 +30,28 @@ const mockAuditLogger: AuditLogger = {
   log: () => {},
   query: () => ({ items: [], total: 0 }),
 };
+
+describe("parseProxyRequestBody", () => {
+  it("reads model from parsed JSON object (Fastify default JSON parser)", () => {
+    const { bodyStr, model } = parseProxyRequestBody({ model: "gpt-4o", messages: [{ role: "user", content: "hi" }] });
+    expect(model).toBe("gpt-4o");
+    expect(bodyStr).toContain("gpt-4o");
+  });
+
+  it("reads model from JSON string (scoped string parser)", () => {
+    const { bodyStr, model } = parseProxyRequestBody(
+      JSON.stringify({ model: "claude-3-5-sonnet-20241022", max_tokens: 10 })
+    );
+    expect(model).toBe("claude-3-5-sonnet-20241022");
+    expect(bodyStr).toContain("claude");
+  });
+
+  it("returns unknown model when body is empty", () => {
+    const { bodyStr, model } = parseProxyRequestBody(undefined);
+    expect(model).toBe("unknown");
+    expect(bodyStr).toBeUndefined();
+  });
+});
 
 describe("proxy and log APIs", () => {
   it("returns 502 for /v1/chat/completions when no upstream key configured", async () => {

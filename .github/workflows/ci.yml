@@ -2,9 +2,6 @@ name: CI
 
 on: [push, pull_request]
 
-env:
-  COREPACK_INTEGRITY_KEYS: "0"
-
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -62,6 +62,35 @@ describe("auth middleware and session", () => {
     await app.close();
   });
 
+  it("GET /health succeeds without API key or workspace headers (liveness probe)", async () => {
+    const app = createFastify();
+    registerAuthMiddleware(app, createMockApiKeyManager());
+    app.get("/health", async () => ({ ok: true, service: "test" }));
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/health",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toMatchObject({ ok: true });
+    await app.close();
+  });
+
+  it("GET /metrics succeeds without auth (Prometheus scrape)", async () => {
+    const app = createFastify();
+    registerAuthMiddleware(app, createMockApiKeyManager());
+    app.get("/metrics", async () => "# test metrics\n");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/metrics",
+    });
+
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
   it("allows legacy header auth only in explicit dev mode", async () => {
     const prevNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "development";

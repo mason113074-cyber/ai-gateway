@@ -34,6 +34,8 @@ Fastify 5 with:
   - Gateway API key auth (`Authorization: Bearer gw-...` or `x-api-key`)
   - Bootstrap admin bearer token (`BOOTSTRAP_ADMIN_TOKEN`) for self-hosted admin access
   - Legacy header auth (`x-workspace-id`/`x-user-id`) disabled by default and only available when `ALLOW_LEGACY_HEADER_AUTH=true` and `NODE_ENV !== "production"`
+- `/health` — liveness (no auth)
+- `/metrics` — Prometheus text format: `gateway_proxy_requests_total` (proxy path) and `gateway_process_heap_bytes`; optional OpenTelemetry (`@fastify/otel`) can be layered on later
 
 ### Domain (packages/domain)
 Shared logic and types:
