@@ -1,6 +1,6 @@
 import "dotenv/config";
 import path from "node:path";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { renderMetrics } from "./metrics.js";
 import {
@@ -45,6 +45,23 @@ type FastifyLike = Parameters<typeof registerProxyRoutes>[0] & {
   log: { error: (e: unknown) => void };
 };
 
+type ProxyScopeLike = Parameters<typeof registerProxyRoutes>[0] & {
+  addContentTypeParser: (
+    contentType: string,
+    opts: { parseAs: "string"; bodyLimit: number },
+    parser: (
+      req: unknown,
+      body: string,
+      done: (err: Error | null, body?: string) => void
+    ) => void
+  ) => void;
+};
+
+type HeaderSendReply = {
+  header: (name: string, value: string) => HeaderSendReply;
+  send: (body: unknown) => unknown;
+};
+
 const dbPath = process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "gateway.db");
 const { db, raw } = createDatabaseWithRaw(dbPath);
 const logStore = createLogStore(db);
@@ -84,11 +101,11 @@ registerAuthMiddleware(
   }
 );
 
-await app.register(async (proxyScope: FastifyInstance) => {
+await app.register(async (proxyScope: ProxyScopeLike) => {
   proxyScope.addContentTypeParser(
     "application/json",
     { parseAs: "string", bodyLimit: 10485760 },
-    (_req, body, done) => {
+    (_req: unknown, body: string, done: (err: Error | null, body?: string) => void) => {
       done(null, body);
     }
   );
@@ -102,7 +119,7 @@ await app.register(async (proxyScope: FastifyInstance) => {
 
 app.get("/health", async () => ({ ok: true, service: "ai-gateway-api" }));
 
-app.get("/metrics", async (_request, reply) => {
+app.get("/metrics", async (_request: unknown, reply: HeaderSendReply) => {
   return reply
     .header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
     .send(renderMetrics());
