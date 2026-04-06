@@ -24,6 +24,9 @@
   - `GET /health` and `GET /metrics` bypass global auth (load balancers and Prometheus).
   - Proxy uses Fastify `request.body` with a `/v1/*`-scoped JSON parser; SSE responses set streaming headers where applicable.
   - `GET /metrics` exposes Prometheus text (`gateway_proxy_requests_total` per provider/status, `gateway_process_heap_bytes`).
+  - API entrypoint: `apps/api/src/server.ts` loads env and calls `startGatewayServer()` in `server-bootstrap.ts`; REST handlers live under `apps/api/src/routes/*`.
+  - Proxy implementation is split across `proxy.ts`, `proxy-forward.ts`, `proxy-pii.ts`, `proxy-rate-limit.ts`, `proxy-upstream.ts`, and `proxy-types.ts`.
+  - Docker / web: admin BFF should set `GATEWAY_INTERNAL_API_URL` (e.g. `http://api:4000`) so Next server routes resolve the API by service name at **runtime**; `NEXT_PUBLIC_API_BASE_URL` remains supported for compatibility.
   - Optional: Dependabot and CodeQL under `.github/`; see `docs/porting-pdf-review.md` for the PDF review port notes.
 - **Blockers**: None.
 - **Next 3 priorities**: (1) Add explicit request/response adapter layer before re-enabling cross-provider fallback. (2) Implement full PostgreSQL runtime support with parity tests. (3) Add web automated tests for admin console flows.

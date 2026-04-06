@@ -30,7 +30,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # Server-side fetch from Next → Fastify (Docker DNS service name, not localhost)
+      # Server-side BFF → Fastify (runtime; preferred over NEXT_PUBLIC_* for Docker)
+      - GATEWAY_INTERNAL_API_URL=http://api:4000
+      # Optional: kept for compatibility / client bundles that read public env at build time
       - NEXT_PUBLIC_API_BASE_URL=http://api:4000
       # Must match API bootstrap admin — required for /api/gateway/* admin proxy
       - BOOTSTRAP_ADMIN_TOKEN=${BOOTSTRAP_ADMIN_TOKEN}
