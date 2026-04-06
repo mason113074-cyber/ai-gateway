@@ -12,6 +12,8 @@ services:
       - DATABASE_PATH=/app/data/gateway.db
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - BOOTSTRAP_ADMIN_TOKEN=${BOOTSTRAP_ADMIN_TOKEN}
+      - BOOTSTRAP_ADMIN_WORKSPACE_ID=${BOOTSTRAP_ADMIN_WORKSPACE_ID:-default}
     volumes:
       - gateway-data:/app/data
     restart: unless-stopped
@@ -28,7 +30,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:4000
+      # Server-side fetch from Next → Fastify (Docker DNS service name, not localhost)
+      - NEXT_PUBLIC_API_BASE_URL=http://api:4000
+      # Must match API bootstrap admin — required for /api/gateway/* admin proxy
+      - BOOTSTRAP_ADMIN_TOKEN=${BOOTSTRAP_ADMIN_TOKEN}
     depends_on:
       api:
         condition: service_healthy

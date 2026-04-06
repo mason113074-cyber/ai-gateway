@@ -1,3 +1,9 @@
+/**
+ * Same-origin BFF proxy: browser → Next → Fastify API.
+ *
+ * Uses server-only `BOOTSTRAP_ADMIN_TOKEN` (see `lib/server-auth.ts`) so the API accepts
+ * the request as bootstrap admin. Never import secrets into client components.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import {
   getGatewayApiBaseUrl,

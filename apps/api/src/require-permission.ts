@@ -1,17 +1,17 @@
 import { hasPermission } from "@agent-control-tower/domain";
+import type { FastifyReply } from "fastify/types/reply";
+import type { FastifyRequest } from "fastify/types/request";
 
-export type RequestWithAuth = {
+export type RequestWithAuth = FastifyRequest & {
+  workspaceId?: string;
+  userId?: string;
   userRole?: string;
   permissions?: string[];
-};
-
-export type ReplyWithSent = {
-  sent: boolean;
-  status: (code: number) => { send: (body: unknown) => void };
+  allowedModels?: string[] | null;
 };
 
 export function requirePermission(permission: string) {
-  return async function (request: RequestWithAuth, reply: ReplyWithSent): Promise<void> {
+  return async function (request: RequestWithAuth, reply: FastifyReply): Promise<void> {
     const userRole = request.userRole ?? "viewer";
     const keyPermissions = request.permissions ?? [];
     if (hasPermission(userRole, keyPermissions, permission)) return;

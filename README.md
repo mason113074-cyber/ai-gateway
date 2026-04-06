@@ -14,10 +14,12 @@ Open-source LLM proxy with agent identity, cost tracking, governance, and guardr
 git clone https://github.com/mason113074-cyber/ai-gateway.git
 cd ai-gateway
 cp .env.example .env
-# Edit .env and set OPENAI_API_KEY and ANTHROPIC_API_KEY
-# Set BOOTSTRAP_ADMIN_TOKEN for admin APIs + web console proxy
+# Edit .env: set OPENAI_API_KEY, ANTHROPIC_API_KEY, and BOOTSTRAP_ADMIN_TOKEN
+# The same BOOTSTRAP_ADMIN_TOKEN must be available to both api and web (Compose passes it through).
 docker compose up -d
 ```
+
+`docker-compose.yml` sets `NEXT_PUBLIC_API_BASE_URL=http://api:4000` for the **web** container so server-side fetches reach the API by Docker network name (not `localhost`). The web app reads `NEXT_PUBLIC_API_BASE_URL` (see `apps/web/lib/server-auth.ts`), not `NEXT_PUBLIC_API_URL`.
 
 - **API:** http://localhost:4000  
 - **Web console:** http://localhost:3000  
