@@ -21,15 +21,13 @@ Next.js 14+ Admin Console:
 - Dashboard: cost overview, request stats
 - Agent registry: list, edit, status
 - Logs: request log viewer
-- Approvals: pending approval queue
-- Audit: compliance event viewer
+- Approvals: pending approval queue (mock data)
+- Audit: compliance event viewer (immutable `audit_logs` + mock legacy endpoints)
 
 ### API (apps/api)
 Fastify 5 with:
 - /v1/* — LLM proxy with streaming SSE passthrough
-- /api/agents — Agent registry CRUD
-- /api/logs — Request log query
-- /api/stats — Cost and usage stats
+- /api/* — REST surface registered from `apps/api/src/routes/*` (wired in `server.ts`)
 - Auth middleware:
   - Gateway API key auth (`Authorization: Bearer gw-...` or `x-api-key`)
   - Bootstrap admin bearer token (`BOOTSTRAP_ADMIN_TOKEN`) for self-hosted admin access
@@ -41,34 +39,27 @@ Fastify 5 with:
 Shared logic and types:
 - Policy engine (evaluatePolicy → allow/deny/requires_approval)
 - Agent registry (auto-register on first request)
-- Log store (InMemoryLogStore, will migrate to SQLite)
+- SQLite-backed log store, audit logger, budgets, API keys, guardrails, rate limits
 - Workspace and RBAC types
 - Proxy types and cost estimation
 
-## Database (Phase 5+)
+## Database
 - SQLite via better-sqlite3 + drizzle-orm
 - WAL mode for concurrent reads
 - BEGIN IMMEDIATE for atomic budget enforcement
-- Tables: agents, proxy_logs, budgets, policy_rules, audit_events
-- Runtime currently fails closed when `DATABASE_URL` is set; production runtime supports SQLite only.
+- Tables include: agents, proxy_logs, team_budgets, agent_budgets, audit_logs, api_keys, guardrail_configs, rate_limit_windows, rate_limit_configs, users
+- Runtime fails closed when `DATABASE_URL` is set; production runtime supports SQLite only.
 
 ## Key decisions
-- SQLite over PostgreSQL: simpler deployment for solo founder, sufficient for <10K agents
+- SQLite over PostgreSQL in this release: simpler deployment; PostgreSQL support is a future milestone (see `docs/context/current-status.md`).
 - Agent identity via x-agent-id header: differentiator vs competitors (request-level only)
 - MIT proxy + closed-source governance: validated by Helicone/Langfuse/LiteLLM patterns
 - Streaming SSE passthrough: no buffering, preserves OpenAI/Anthropic response format
 - Cross-provider fallback is disabled by default because OpenAI and Anthropic payload/response formats are not interchangeable without explicit adapters.
 
-## Completed phases (on main)
-- Phase 1: LLM Proxy Layer
-- Phase 2: Agent Registry + Auto-register
-- Phase 3: Policy Engine (allow/deny/requires_approval)
-- Phase 4: Dashboard + README
+## Completed work (on main)
+Phases 1–11 are merged: core proxy, persistent storage, budgets, RBAC/API keys, PII guardrails, rate limiting, Docker/CI, and follow-up hardening. Authoritative detail: `docs/context/current-status.md`.
 
-## Next phases (see docs/CURSOR_NEXT_ORDER.md)
-- Phase 5: Persistent Storage + Audit Logs (SQLite)
-- Phase 6: Budget Enforcement
-- Phase 7: PII Detection
-- Phase 8: RBAC + API Keys
-- Phase 9: Multi-Provider Router
-- Phase 10: Compliance Export
+## What to read next
+- **Current truth**: `docs/context/current-status.md`
+- **Roadmap / backlog**: `docs/CURSOR_NEXT_ORDER.md` (high-level priorities, not a phase-by-phase implementation runbook)

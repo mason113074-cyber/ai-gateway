@@ -1,7 +1,11 @@
 import { request as undiciRequest } from "undici";
 import { recordProxyRequest } from "./metrics.js";
 import {
-  DEFAULT_PROVIDERS,
+  rateLimitWindowKeyAgent,
+  rateLimitWindowKeyGlobal,
+  rateLimitWindowKeyTeam,
+} from "./rate-limit-keys.js";
+import {
   evaluatePolicy,
   estimateCost,
   detectPii,
@@ -15,6 +19,7 @@ import {
   type RateLimitConfig,
   type RateLimiter,
 } from "@agent-control-tower/domain";
+import { getUpstreamApiKey, getUpstreamBaseUrl } from "./proxy-upstream.js";
 
 interface ProxyApp {
   all(path: string, handler: (req: unknown, reply: unknown) => Promise<void>): void;
@@ -55,17 +60,6 @@ export function parseProxyRequestBody(body: unknown): { bodyStr: string | undefi
     }
   }
   return { bodyStr, model };
-}
-
-function getUpstreamBaseUrl(provider: string): string | null {
-  const config = DEFAULT_PROVIDERS[provider as keyof typeof DEFAULT_PROVIDERS];
-  return config ? config.baseUrl : null;
-}
-
-function getUpstreamApiKey(provider: string): string | null {
-  const config = DEFAULT_PROVIDERS[provider as keyof typeof DEFAULT_PROVIDERS];
-  if (!config) return null;
-  return process.env[config.apiKeyEnvVar] ?? null;
 }
 
 export function registerProxyRoutes(
@@ -213,17 +207,15 @@ export function registerProxyRoutes(
       const rlConfigs = options.getRateLimitConfig(workspaceId, teamId, agentId);
 
       if (rlConfigs.globalConfig) {
-        const globalResult = options.rateLimiter.check(
-          `global:${workspaceId}`,
-          rlConfigs.globalConfig
-        );
+        const globalKey = rateLimitWindowKeyGlobal(workspaceId);
+        const globalResult = options.rateLimiter.check(globalKey, rlConfigs.globalConfig);
         if (!globalResult.allowed) {
           await auditLogger.log(workspaceId, {
             eventType: "rate_limit.exceeded",
             actorType: "agent",
             actorId: agentId,
             targetType: "rate_limit",
-            targetId: `global:${workspaceId}`,
+            targetId: globalKey,
             action: "proxy.request",
             outcome: "denied",
             metadata: {
@@ -246,17 +238,15 @@ export function registerProxyRoutes(
       }
 
       if (rlConfigs.teamConfig) {
-        const teamResult = options.rateLimiter.check(
-          `team:${workspaceId}:${teamId}`,
-          rlConfigs.teamConfig
-        );
+        const teamKey = rateLimitWindowKeyTeam(workspaceId, teamId);
+        const teamResult = options.rateLimiter.check(teamKey, rlConfigs.teamConfig);
         if (!teamResult.allowed) {
           await auditLogger.log(workspaceId, {
             eventType: "rate_limit.exceeded",
             actorType: "agent",
             actorId: agentId,
             targetType: "rate_limit",
-            targetId: `team:${workspaceId}:${teamId}`,
+            targetId: teamKey,
             action: "proxy.request",
             outcome: "denied",
             metadata: {
@@ -280,17 +270,15 @@ export function registerProxyRoutes(
       }
 
       if (rlConfigs.agentConfig) {
-        const agentResult = options.rateLimiter.check(
-          `agent:${agentId}`,
-          rlConfigs.agentConfig
-        );
+        const agentKey = rateLimitWindowKeyAgent(workspaceId, agentId);
+        const agentResult = options.rateLimiter.check(agentKey, rlConfigs.agentConfig);
         if (!agentResult.allowed) {
           await auditLogger.log(workspaceId, {
             eventType: "rate_limit.exceeded",
             actorType: "agent",
             actorId: agentId,
             targetType: "rate_limit",
-            targetId: `agent:${agentId}`,
+            targetId: agentKey,
             action: "proxy.request",
             outcome: "denied",
             metadata: {
@@ -326,7 +314,7 @@ export function registerProxyRoutes(
           const piiSummary = piiMatches.map((m) => m.type);
 
           if (piiConfig.action === "block") {
-            auditLogger.log(workspaceId, {
+            await auditLogger.log(workspaceId, {
               eventType: "guardrail.pii_blocked",
               actorType: "agent",
               actorId: agentId,
@@ -346,7 +334,7 @@ export function registerProxyRoutes(
 
           if (piiConfig.action === "redact") {
             body = redactRequestBody(body, piiMatches);
-            auditLogger.log(workspaceId, {
+            await auditLogger.log(workspaceId, {
               eventType: "guardrail.pii_redacted",
               actorType: "system",
               actorId: "pii-guardrail",
@@ -359,7 +347,7 @@ export function registerProxyRoutes(
           }
 
           if (piiConfig.action === "warn") {
-            auditLogger.log(workspaceId, {
+            await auditLogger.log(workspaceId, {
               eventType: "guardrail.pii_warning",
               actorType: "system",
               actorId: "pii-guardrail",
@@ -454,21 +442,21 @@ export function registerProxyRoutes(
           );
           if (rlConfigs.globalConfig)
             options.rateLimiter.consume(
-              `global:${workspaceId}`,
+              rateLimitWindowKeyGlobal(workspaceId),
               rlConfigs.globalConfig,
               1,
               0
             );
           if (rlConfigs.teamConfig)
             options.rateLimiter.consume(
-              `team:${workspaceId}:${teamId}`,
+              rateLimitWindowKeyTeam(workspaceId, teamId),
               rlConfigs.teamConfig,
               1,
               0
             );
           if (rlConfigs.agentConfig)
             options.rateLimiter.consume(
-              `agent:${agentId}`,
+              rateLimitWindowKeyAgent(workspaceId, agentId),
               rlConfigs.agentConfig,
               1,
               0
@@ -533,27 +521,27 @@ export function registerProxyRoutes(
         const tokenCount = usage?.total_tokens ?? 0;
         if (rlConfigs.globalConfig)
           options.rateLimiter.consume(
-            `global:${workspaceId}`,
+            rateLimitWindowKeyGlobal(workspaceId),
             rlConfigs.globalConfig,
             1,
             tokenCount
           );
         if (rlConfigs.teamConfig)
           options.rateLimiter.consume(
-            `team:${workspaceId}:${teamId}`,
+            rateLimitWindowKeyTeam(workspaceId, teamId),
             rlConfigs.teamConfig,
             1,
             tokenCount
           );
         if (rlConfigs.agentConfig)
           options.rateLimiter.consume(
-            `agent:${agentId}`,
+            rateLimitWindowKeyAgent(workspaceId, agentId),
             rlConfigs.agentConfig,
             1,
             tokenCount
           );
       }
-      auditLogger.log(workspaceId, {
+      await auditLogger.log(workspaceId, {
         eventType: "proxy.request",
         actorType: "agent",
         actorId: agentId,
@@ -568,7 +556,7 @@ export function registerProxyRoutes(
       recordProxyRequest(provider, "502");
       const latencyMs = Date.now() - startTime;
       const errorMessage = err instanceof Error ? err.message : String(err);
-      logStore.append({
+      await logStore.append({
         id: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
         workspaceId,
@@ -585,7 +573,7 @@ export function registerProxyRoutes(
         costUsd: null,
         error: errorMessage,
       });
-      auditLogger.log(workspaceId, {
+      await auditLogger.log(workspaceId, {
         eventType: "proxy.request",
         actorType: "agent",
         actorId: agentId,

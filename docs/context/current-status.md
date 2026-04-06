@@ -1,6 +1,6 @@
 # Current status
 
-- **Branch health**: Only `main` branch exists. Protected. All feature branches merged and deleted.
+- **Branch health**: Release integration happens on `main` (protect in GitHub as appropriate). Long-lived feature branches may exist in clones; treat `main` as the integration target.
 - **Architecture snapshot**: Monorepo with apps/web (Next.js), apps/api (Fastify), packages/domain (types, policy, SQLite-backed db schema/stores, audit, PII detector, guardrail store, rate limiter, rate limit config store). See docs/architecture.md.
 - **Done**: Phases 1–11 on main. Docker Compose + OSS launch readiness complete.
   - Phase 1–4: Core proxy, policy engine, agent registry, admin dashboard
