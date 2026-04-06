@@ -27,6 +27,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
+# Default for Compose / internal networks — override in orchestration if the API hostname differs
+ENV GATEWAY_INTERNAL_API_URL=http://api:4000
 
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static

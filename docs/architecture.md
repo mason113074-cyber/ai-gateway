@@ -17,7 +17,7 @@ Audit Log + Cost Tracking + PII Detection
 ## Layers
 
 ### Web (apps/web)
-Next.js 14+ Admin Console:
+Next.js 16 (App Router) admin console:
 - Dashboard: cost overview, request stats
 - Agent registry: list, edit, status
 - Logs: request log viewer
@@ -26,14 +26,18 @@ Next.js 14+ Admin Console:
 
 ### API (apps/api)
 Fastify 5 with:
-- /v1/* — LLM proxy with streaming SSE passthrough
-- /api/* — REST surface registered from `apps/api/src/routes/*` (wired in `server.ts`)
+- /v1/* — LLM proxy with streaming SSE passthrough (handler in `apps/api/src/proxy.ts`, helpers in `proxy-*.ts`; Fastify registration in `apps/api/src/routes/register-proxy.ts` via `registerProxyPlugin`)
+- /api/* — REST surface registered from `apps/api/src/routes/*` via `registerRestRoutes` in `apps/api/src/routes/index.ts` (process wiring in `apps/api/src/server-bootstrap.ts`; entrypoint `server.ts` only loads env and calls `startGatewayServer()`)
 - Auth middleware:
   - Gateway API key auth (`Authorization: Bearer gw-...` or `x-api-key`)
   - Bootstrap admin bearer token (`BOOTSTRAP_ADMIN_TOKEN`) for self-hosted admin access
   - Legacy header auth (`x-workspace-id`/`x-user-id`) disabled by default and only available when `ALLOW_LEGACY_HEADER_AUTH=true` and `NODE_ENV !== "production"`
 - `/health` — liveness (no auth)
 - `/metrics` — Prometheus text format: `gateway_proxy_requests_total` (proxy path) and `gateway_process_heap_bytes`; optional OpenTelemetry (`@fastify/otel`) can be layered on later
+
+### Web → API bridge (admin console)
+- Browser calls same-origin `/api/gateway/*` (Next Route Handler).
+- Server-side fetches use `GATEWAY_INTERNAL_API_URL` when set (Docker Compose / K8s), else `NEXT_PUBLIC_API_BASE_URL`, else `http://localhost:4000`. This avoids relying on `NEXT_PUBLIC_*` alone, which is inlined at web build time for client bundles.
 
 ### Domain (packages/domain)
 Shared logic and types:

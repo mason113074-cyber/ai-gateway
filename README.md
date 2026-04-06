@@ -19,7 +19,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-`docker-compose.yml` sets `NEXT_PUBLIC_API_BASE_URL=http://api:4000` for the **web** container so server-side fetches reach the API by Docker network name (not `localhost`). The web app reads `NEXT_PUBLIC_API_BASE_URL` (see `apps/web/lib/server-auth.ts`), not `NEXT_PUBLIC_API_URL`.
+`docker-compose.yml` sets `GATEWAY_INTERNAL_API_URL=http://api:4000` (and `NEXT_PUBLIC_API_BASE_URL` for compatibility) on the **web** container so server-side `/api/gateway/*` fetches reach the API by Docker DNS name (not `localhost`). `getGatewayApiBaseUrl()` prefers `GATEWAY_INTERNAL_API_URL`, then `NEXT_PUBLIC_API_BASE_URL` (see `apps/web/lib/server-auth.ts`).
 
 - **API:** http://localhost:4000  
 - **Web console:** http://localhost:3000  

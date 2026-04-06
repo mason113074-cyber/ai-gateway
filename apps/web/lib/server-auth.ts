@@ -4,7 +4,8 @@
  * Deployment model (self-hosted):
  * - Browser calls same-origin `/api/gateway/...` (Next Route Handler).
  * - The Route Handler uses `getGatewayApiBaseUrl()` to reach the Fastify API (same machine,
- *   Docker network `http://api:4000`, or any URL you set).
+ *   Docker network `http://api:4000`, or any URL you set). Prefer `GATEWAY_INTERNAL_API_URL`
+ *   in container/server environments so the URL is not tied to Next.js `NEXT_PUBLIC_*` build-time inlining.
  * - Every proxied request must present `Authorization: Bearer <BOOTSTRAP_ADMIN_TOKEN>` so the
  *   API treats the call as the bootstrap admin workspace (see API auth middleware).
  *
@@ -21,7 +22,11 @@
  */
 
 export function getGatewayApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+  return (
+    process.env.GATEWAY_INTERNAL_API_URL ??
+    process.env.NEXT_PUBLIC_API_BASE_URL ??
+    "http://localhost:4000"
+  );
 }
 
 export function getGatewayAdminToken(): string {
