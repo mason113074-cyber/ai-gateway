@@ -6,3 +6,7 @@ coverage
 .env.local
 .cursor/secrets
 .DS_Store
+
+# Turbo and incremental TypeScript outputs (local caches / no-emit artifacts)
+.turbo/
+*.tsbuildinfo
