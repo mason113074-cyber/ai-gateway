@@ -26,8 +26,8 @@ Next.js 16 (App Router) admin console:
 
 ### API (apps/api)
 Fastify 5 with:
-- /v1/* — LLM proxy with streaming SSE passthrough (handler in `apps/api/src/proxy.ts`, helpers in `proxy-*.ts`)
-- /api/* — REST surface registered from `apps/api/src/routes/*` via `registerRestRoutes` in `apps/api/src/routes/index.ts` (wired in `apps/api/src/server-bootstrap.ts`; entrypoint `server.ts` only loads env and calls `startGatewayServer()`)
+- /v1/* — LLM proxy with streaming SSE passthrough (handler in `apps/api/src/proxy.ts`, helpers in `proxy-*.ts`; Fastify registration in `apps/api/src/routes/register-proxy.ts` via `registerProxyPlugin`)
+- /api/* — REST surface registered from `apps/api/src/routes/*` via `registerRestRoutes` in `apps/api/src/routes/index.ts` (process wiring in `apps/api/src/server-bootstrap.ts`; entrypoint `server.ts` only loads env and calls `startGatewayServer()`)
 - Auth middleware:
   - Gateway API key auth (`Authorization: Bearer gw-...` or `x-api-key`)
   - Bootstrap admin bearer token (`BOOTSTRAP_ADMIN_TOKEN`) for self-hosted admin access
