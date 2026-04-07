@@ -47,7 +47,7 @@ const guardrailStore = createGuardrailStore(db);
 const rateLimiter = createSlidingWindowRateLimiter(raw);
 const rateLimitConfigStore = createSqliteRateLimitConfigStore(raw);
 
-setInterval(() => rateLimiter.cleanup(), 5 * 60 * 1000);
+setInterval(() => rateLimiter.cleanup(), 5 * 60 * 1000).unref();
 
 const createApp = Fastify as unknown as (opts?: { logger?: boolean }) => FastifyLike;
 const app = createApp({ logger: true });
@@ -110,3 +110,17 @@ app.listen({ port, host: "0.0.0.0" }).catch((error: unknown) => {
   app.log.error(error);
   process.exit(1);
 });
+
+async function shutdown(signal: string): Promise<void> {
+  app.log.info({ signal }, "Received shutdown signal, closing server");
+  try {
+    await app.close();
+    process.exit(0);
+  } catch (err) {
+    app.log.error(err, "Error during graceful shutdown");
+    process.exit(1);
+  }
+}
+
+process.once("SIGTERM", () => { shutdown("SIGTERM").catch(() => process.exit(1)); });
+process.once("SIGINT", () => { shutdown("SIGINT").catch(() => process.exit(1)); });

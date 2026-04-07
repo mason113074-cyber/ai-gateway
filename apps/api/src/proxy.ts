@@ -84,7 +84,7 @@ export function registerProxyRoutes(
     rateLimiter?: RateLimiter;
   }
 ): void {
-  const retryStatusCodes = new Set([429, 500, 502, 503, 504]);
+  const retryStatusCodes = new Set([500, 502, 503, 504]);
 
   app.all("/v1/*", async (req: unknown, reply: unknown) => {
     const req_ = req as {

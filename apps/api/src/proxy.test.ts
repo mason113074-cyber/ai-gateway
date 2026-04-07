@@ -323,4 +323,60 @@ describe("proxy and log APIs", () => {
       await app.close();
     }
   });
+
+  it("does not retry upstream 429 (rate limit should not be amplified)", async () => {
+    process.env.BOOTSTRAP_ADMIN_TOKEN = ADMIN_TOKEN;
+    process.env.OPENAI_API_KEY = "upstream-openai-key";
+
+    const app = createFastify();
+    registerAuthMiddleware(app, legacyAuth);
+    registerProxyRoutes(
+      app,
+      new InMemoryAgentRegistry(),
+      new InMemoryLogStore(),
+      mockBudgetManager,
+      mockAuditLogger
+    );
+
+    const previousDispatcher = getGlobalDispatcher();
+    const mockAgent = new MockAgent();
+    mockAgent.disableNetConnect();
+    const openaiPool = mockAgent.get("https://api.openai.com");
+    let callCount = 0;
+    openaiPool
+      .intercept({ path: "/v1/chat/completions", method: "POST" })
+      .reply(() => {
+        callCount += 1;
+        return {
+          statusCode: 429,
+          data: { error: "rate_limit_exceeded" },
+          headers: { "content-type": "application/json" },
+        };
+      });
+    setGlobalDispatcher(mockAgent);
+
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        headers: {
+          ...ADMIN_AUTH,
+          "content-type": "application/json",
+          "x-provider": "openai",
+          "x-agent-id": "a1",
+          "x-team-id": "t1",
+        },
+        payload: JSON.stringify({ model: "gpt-4o", messages: [] }),
+      });
+
+      expect(res.statusCode).toBe(429);
+      expect(callCount).toBe(1);
+    } finally {
+      setGlobalDispatcher(previousDispatcher);
+      await mockAgent.close();
+      delete process.env.BOOTSTRAP_ADMIN_TOKEN;
+      delete process.env.OPENAI_API_KEY;
+      await app.close();
+    }
+  });
 });
