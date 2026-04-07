@@ -1,0 +1,4 @@
+
+> @agent-control-tower/web@0.1.0 check /home/runner/work/ai-gateway/ai-gateway/apps/web
+> tsc --noEmit
+

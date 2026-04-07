@@ -1,0 +1,4 @@
+
+> @agent-control-tower/api@0.1.0 check /home/runner/work/ai-gateway/ai-gateway/apps/api
+> tsc --noEmit -p tsconfig.json
+
