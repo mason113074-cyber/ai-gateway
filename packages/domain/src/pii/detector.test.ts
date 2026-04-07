@@ -161,6 +161,22 @@ describe("PII Detector", () => {
       const matches = detectPii("", ALL_TYPES);
       expect(matches).toHaveLength(0);
     });
+
+    it("does not flag generic 32-char alphanumeric strings as api_key", () => {
+      const matches = detectPii(
+        "sessionId: abcdef1234567890abcdef1234567890",
+        { ...ALL_TYPES, enabledTypes: ["api_key"] }
+      );
+      expect(matches).toHaveLength(0);
+    });
+
+    it("does not flag UUIDs (no hyphens) as api_key", () => {
+      const matches = detectPii(
+        "id: 550e8400e29b41d4a716446655440000",
+        { ...ALL_TYPES, enabledTypes: ["api_key"] }
+      );
+      expect(matches).toHaveLength(0);
+    });
   });
 
   describe("redactText", () => {

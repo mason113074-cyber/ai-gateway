@@ -142,6 +142,26 @@ function initializeSqliteSchema(sqlite: RawDatabase): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    -- Performance indexes for common query patterns
+    CREATE INDEX IF NOT EXISTS idx_proxy_logs_workspace ON proxy_logs(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_proxy_logs_agent ON proxy_logs(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_proxy_logs_team ON proxy_logs(team_id);
+    CREATE INDEX IF NOT EXISTS idx_proxy_logs_timestamp ON proxy_logs(timestamp);
+
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_workspace ON audit_logs(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_id);
+
+    CREATE INDEX IF NOT EXISTS idx_agents_workspace ON agents(workspace_id);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+    CREATE INDEX IF NOT EXISTS idx_api_keys_workspace ON api_keys(workspace_id);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_team_budgets_workspace_team ON team_budgets(workspace_id, team_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_budgets_workspace_agent ON agent_budgets(workspace_id, agent_id);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_rate_limit_configs_lookup ON rate_limit_configs(workspace_id, target_type, target_id);
   `);
 }
 

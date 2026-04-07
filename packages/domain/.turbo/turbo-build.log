@@ -1,4 +1,0 @@
-
-> @agent-control-tower/domain@0.1.0 build /home/runner/work/ai-gateway/ai-gateway/packages/domain
-> tsc -p tsconfig.json
-
